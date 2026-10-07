@@ -10,6 +10,7 @@ Conventions inside the markdown (HTML comments render invisibly):
   <!-- raises -->     the next script block must exit non-zero
   <!-- continue -->   prepend the previous script block(s) to this one
   <!-- file: p.py --> write the next block to <workdir>/p.py instead of running
+  <!-- mypy: p.py -->  the next ```text block must equal `mypy p.py` output
 Blocks of one article share a temp working directory.
 Also flags '{{', '{%', '{#' outside code fences (Hexo would treat them as Nunjucks).
 """
@@ -93,6 +94,14 @@ def check_file(path):
         chain = ''
         doctests = []
         for k, b in enumerate(blocks):
+            mypy_files = [x[5:].strip() for x in b['markers'] if x.startswith('mypy:')]
+            if mypy_files and b['lang'] == 'text':
+                stats['compared'] += 1
+                r = run(['mypy', '--python-version', '3.14', '--no-color-output', *mypy_files[0].split()], wd)
+                got, exp = r.stdout.strip(), b['code'].strip()
+                if got != exp:
+                    failures.append(f'{path}:{b["line"]}: mypy output mismatch\n--- expected\n{exp}\n--- got\n{got}')
+                continue
             if b['lang'] not in ('python', 'py'):
                 continue
             mk = b['markers']
