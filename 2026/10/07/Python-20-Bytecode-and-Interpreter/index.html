@@ -1,0 +1,1332 @@
+<!DOCTYPE HTML>
+<html lang="zh-CN">
+
+
+<head>
+    <meta charset="utf-8">
+    <meta name="keywords" content="Python 从入门到精通（20）：字节码与解释器内部, Wxrkz">
+    <meta name="description" content="代码对象的全部关键字段与精确错误定位表；逐行读懂 dis 输出、值栈与跳转；帧对象与调用栈；编译器做了哪些优化；3.11 起的自适应特化解释器——亲眼看到 BINARY_OP 被特化为 BINARY_OP_ADD_INT 又因类型变化而改变；用 100 行 Python 写一个能运行真实 CPython 字节码的迷你虚拟机；sys.monitoring 与 JIT。">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="renderer" content="webkit|ie-stand|ie-comp">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="referrer" content="no-referrer-when-downgrade">
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+
+
+    <title>Python 从入门到精通（20）：字节码与解释器内部 | Wxrkz</title>
+    <link rel="icon" type="image/png" href="/blog/favicon.png">
+    
+
+
+    <!-- bg-cover style     -->
+
+
+
+<link rel="stylesheet" type="text/css" href="/blog/libs/awesome/css/all.min.css">
+<link rel="stylesheet" type="text/css" href="/blog/libs/materialize/materialize.min.css">
+<link rel="stylesheet" type="text/css" href="/blog/libs/aos/aos.css">
+<link rel="stylesheet" type="text/css" href="/blog/libs/animate/animate.min.css">
+<link rel="stylesheet" type="text/css" href="/blog/libs/lightGallery/css/lightgallery.min.css">
+<link rel="stylesheet" type="text/css" href="/blog/css/matery.css">
+<link rel="stylesheet" type="text/css" href="/blog/css/my.css">
+<link rel="stylesheet" type="text/css" href="/blog/css/dark.css" media="none" onload="if(media!='all')media='all'">
+
+
+
+
+    <link rel="stylesheet" href="/blog/css/post.css">
+
+
+
+    
+
+
+
+    <script src="/blog/libs/jquery/jquery-3.6.0.min.js"></script>
+
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+
+<body>
+    <header class="navbar-fixed">
+    <nav id="headNav" class="bg-color nav-transparent">
+        <div id="navContainer" class="nav-wrapper container">
+            <div class="brand-logo">
+                <a href="/blog/" class="waves-effect waves-light">
+                    
+                    <img src="/blog/medias/logo.png" class="logo-img" alt="LOGO">
+                    
+                    <span class="logo-span">Wxrkz</span>
+                </a>
+            </div>
+            
+
+<a href="#" data-target="mobile-nav" class="sidenav-trigger button-collapse"><i class="fas fa-bars"></i></a>
+<ul class="right nav-menu">
+  
+  <li class="hide-on-med-and-down nav-item">
+    
+    <a href="/blog/" class="waves-effect waves-light">
+      
+      <i class="fas fa-home" style="zoom: 0.6;"></i>
+      
+      <span>首页</span>
+    </a>
+    
+  </li>
+  
+  <li class="hide-on-med-and-down nav-item">
+    
+    <a href="/blog/tags" class="waves-effect waves-light">
+      
+      <i class="fas fa-tags" style="zoom: 0.6;"></i>
+      
+      <span>标签</span>
+    </a>
+    
+  </li>
+  
+  <li class="hide-on-med-and-down nav-item">
+    
+    <a href="/blog/categories" class="waves-effect waves-light">
+      
+      <i class="fas fa-bookmark" style="zoom: 0.6;"></i>
+      
+      <span>分类</span>
+    </a>
+    
+  </li>
+  
+  <li class="hide-on-med-and-down nav-item">
+    
+    <a href="/blog/archives" class="waves-effect waves-light">
+      
+      <i class="fas fa-archive" style="zoom: 0.6;"></i>
+      
+      <span>归档</span>
+    </a>
+    
+  </li>
+  
+  <li class="hide-on-med-and-down nav-item">
+    
+    <a href="/blog/about" class="waves-effect waves-light">
+      
+      <i class="fas fa-user-circle" style="zoom: 0.6;"></i>
+      
+      <span>关于</span>
+    </a>
+    
+  </li>
+  
+  <li>
+    <a href="#searchModal" class="modal-trigger waves-effect waves-light">
+      <i id="searchIcon" class="fas fa-search" title="搜索" style="zoom: 0.85;"></i>
+    </a>
+  </li>
+  <li>
+    <a href="javascript:;" class="waves-effect waves-light" onclick="switchNightMode()" title="深色/浅色模式" >
+      <i id="sum-moon-icon" class="fas fa-sun" style="zoom: 0.85;"></i>
+    </a>
+  </li>
+</ul>
+
+
+<div id="mobile-nav" class="side-nav sidenav">
+
+    <div class="mobile-head bg-color">
+        
+        <img src="/blog/medias/logo.png" class="logo-img circle responsive-img">
+        
+        <div class="logo-name">Wxrkz</div>
+        <div class="logo-desc">
+            
+            Never really desperate, only the lost of the soul.
+            
+        </div>
+    </div>
+
+    <ul class="menu-list mobile-menu-list">
+        
+        <li class="m-nav-item">
+	  
+		<a href="/blog/" class="waves-effect waves-light">
+			
+			    <i class="fa-fw fas fa-home"></i>
+			
+			首页
+		</a>
+          
+        </li>
+        
+        <li class="m-nav-item">
+	  
+		<a href="/blog/tags" class="waves-effect waves-light">
+			
+			    <i class="fa-fw fas fa-tags"></i>
+			
+			标签
+		</a>
+          
+        </li>
+        
+        <li class="m-nav-item">
+	  
+		<a href="/blog/categories" class="waves-effect waves-light">
+			
+			    <i class="fa-fw fas fa-bookmark"></i>
+			
+			分类
+		</a>
+          
+        </li>
+        
+        <li class="m-nav-item">
+	  
+		<a href="/blog/archives" class="waves-effect waves-light">
+			
+			    <i class="fa-fw fas fa-archive"></i>
+			
+			归档
+		</a>
+          
+        </li>
+        
+        <li class="m-nav-item">
+	  
+		<a href="/blog/about" class="waves-effect waves-light">
+			
+			    <i class="fa-fw fas fa-user-circle"></i>
+			
+			关于
+		</a>
+          
+        </li>
+        
+        
+        <li><div class="divider"></div></li>
+        <li>
+            <a href="https://github.com/wxrkz123" class="waves-effect waves-light" target="_blank">
+                <i class="fab fa-github-square fa-fw"></i>Fork Me
+            </a>
+        </li>
+        
+    </ul>
+</div>
+
+
+        </div>
+
+        
+            <style>
+    .nav-transparent .github-corner {
+        display: none !important;
+    }
+
+    .github-corner {
+        position: absolute;
+        z-index: 10;
+        top: 0;
+        right: 0;
+        border: 0;
+        transform: scale(1.1);
+    }
+
+    .github-corner svg {
+        color: #0f9d58;
+        fill: #fff;
+        height: 64px;
+        width: 64px;
+    }
+
+    .github-corner:hover .octo-arm {
+        animation: a 0.56s ease-in-out;
+    }
+
+    .github-corner .octo-arm {
+        animation: none;
+    }
+
+    @keyframes a {
+        0%,
+        to {
+            transform: rotate(0);
+        }
+        20%,
+        60% {
+            transform: rotate(-25deg);
+        }
+        40%,
+        80% {
+            transform: rotate(10deg);
+        }
+    }
+</style>
+
+<a href="https://github.com/wxrkz123" class="github-corner tooltipped hide-on-med-and-down" target="_blank"
+   data-tooltip="Fork Me" data-position="left" data-delay="50">
+    <svg viewBox="0 0 250 250" aria-hidden="true">
+        <path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path>
+        <path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2"
+              fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path>
+        <path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z"
+              fill="currentColor" class="octo-body"></path>
+    </svg>
+</a>
+        
+    </nav>
+
+</header>
+
+    
+
+
+
+<div class="bg-cover pd-header post-cover" style="background-image: url('/blog/medias/featureimages/20.jpg')">
+    <div class="container" style="right: 0px;left: 0px;">
+        <div class="row">
+            <div class="col s12 m12 l12">
+                <div class="brand">
+                    <h1 class="description center-align post-title">Python 从入门到精通（20）：字节码与解释器内部</h1>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+<main class="container content">
+
+    
+    <!-- 文章内容详情 -->
+<div id="artDetail">
+    <div class="card">
+        <div class="card-content article-info">
+            <div class="row tag-cate">
+                <div class="col s7">
+                    
+                    <div class="article-tag">
+                        
+                            <a href="/blog/tags/Python/">
+                                <span class="chip bg-color">Python</span>
+                            </a>
+                        
+                            <a href="/blog/tags/Python%E9%AB%98%E7%BA%A7/">
+                                <span class="chip bg-color">Python高级</span>
+                            </a>
+                        
+                    </div>
+                    
+                </div>
+                <div class="col s5 right-align">
+                    
+                    <div class="post-cate">
+                        <i class="fas fa-bookmark fa-fw icon-category"></i>
+                        
+                            <a href="/blog/categories/Python/" class="post-category">
+                                Python
+                            </a>
+                        
+                    </div>
+                    
+                </div>
+            </div>
+
+            <div class="post-info">
+                
+                <div class="post-date info-break-policy">
+                    <i class="far fa-calendar-minus fa-fw"></i>发布日期:&nbsp;&nbsp;
+                    2026-10-07
+                </div>
+                
+
+                
+
+                
+
+                
+
+                
+            </div>
+        </div>
+        <hr class="clearfix">
+
+        
+        <!-- 是否加载使用自带的 prismjs. -->
+        <link rel="stylesheet" href="/blog/libs/prism/prism.min.css">
+        
+
+        
+
+        <div class="card-content article-card-content">
+            <div id="articleContent">
+                <p>在第 01 篇中，我们走马观花地看过一行代码如何变成字节码。现在，经过十九篇的积累，是时候真正打开 CPython 的“引擎盖”了：代码对象里到底装着什么？解释器如何执行一条条字节码指令？为什么 3.11 之后 Python 突然快了很多？本篇最后，我们会用 Python 自己写一个能执行<strong>真实 CPython 字节码</strong>的迷你虚拟机。</p>
+<blockquote>
+<p>本文是「Python 从入门到精通」系列第 20 篇，完整路线见 <a href="/blog/2026/10/07/Python-00-Roadmap/" title="Python 从入门到精通（00）：系列导读与学习路线">系列导读</a>。本篇的字节码输出均来自 CPython 3.14，其他版本的指令名称会有所不同。</p>
+</blockquote>
+<h2 id="一、代码对象"><a href="#一、代码对象" class="headerlink" title="一、代码对象"></a>一、代码对象</h2><h3 id="1-代码对象里有什么"><a href="#1-代码对象里有什么" class="headerlink" title="1. 代码对象里有什么"></a>1. 代码对象里有什么</h3><p>每个函数都有一个 <code>__code__</code> 属性，指向它的<strong>代码对象</strong>（code object）。代码对象是编译器的产物，包含了执行这段代码所需的全部静态信息，而且是<strong>不可变</strong>的：</p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">def</span> <span class="token function">greet</span><span class="token punctuation">(</span>name<span class="token punctuation">,</span> punctuation<span class="token operator">=</span><span class="token string">"!"</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     message <span class="token operator">=</span> <span class="token string-interpolation"><span class="token string">f"你好，</span><span class="token interpolation"><span class="token punctuation">&#123;</span>name<span class="token punctuation">&#125;</span></span><span class="token interpolation"><span class="token punctuation">&#123;</span>punctuation<span class="token punctuation">&#125;</span></span><span class="token string">"</span></span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     <span class="token keyword">return</span> message
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token operator">>></span><span class="token operator">></span> c <span class="token operator">=</span> greet<span class="token punctuation">.</span>__code__
+<span class="token operator">>></span><span class="token operator">></span> c<span class="token punctuation">.</span>co_name<span class="token punctuation">,</span> c<span class="token punctuation">.</span>co_qualname<span class="token punctuation">,</span> c<span class="token punctuation">.</span>co_firstlineno <span class="token operator">></span> <span class="token number">0</span>
+<span class="token punctuation">(</span><span class="token string">'greet'</span><span class="token punctuation">,</span> <span class="token string">'greet'</span><span class="token punctuation">,</span> <span class="token boolean">True</span><span class="token punctuation">)</span>
+<span class="token operator">>></span><span class="token operator">></span> c<span class="token punctuation">.</span>co_argcount<span class="token punctuation">,</span> c<span class="token punctuation">.</span>co_varnames<span class="token punctuation">,</span> c<span class="token punctuation">.</span>co_nlocals     <span class="token comment"># 参数个数、局部变量名（参数排在最前面）</span>
+<span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">,</span> <span class="token punctuation">(</span><span class="token string">'name'</span><span class="token punctuation">,</span> <span class="token string">'punctuation'</span><span class="token punctuation">,</span> <span class="token string">'message'</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token number">3</span><span class="token punctuation">)</span>
+<span class="token operator">>></span><span class="token operator">></span> c<span class="token punctuation">.</span>co_consts                                     <span class="token comment"># 用到的常量</span>
+<span class="token punctuation">(</span><span class="token string">'你好，'</span><span class="token punctuation">,</span><span class="token punctuation">)</span>
+<span class="token operator">>></span><span class="token operator">></span> c<span class="token punctuation">.</span>co_stacksize                                  <span class="token comment"># 执行时值栈的最大深度</span>
+<span class="token number">3</span>
+<span class="token operator">>></span><span class="token operator">></span> <span class="token builtin">type</span><span class="token punctuation">(</span>c<span class="token punctuation">.</span>co_code<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token builtin">len</span><span class="token punctuation">(</span>c<span class="token punctuation">.</span>co_code<span class="token punctuation">)</span> <span class="token operator">%</span> <span class="token number">2</span>            <span class="token comment"># 原始字节码：每条指令 2 字节（操作码 + 参数）</span>
+<span class="token punctuation">(</span><span class="token operator">&lt;</span><span class="token keyword">class</span> <span class="token string">'bytes'</span><span class="token operator">></span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<table>
+<thead>
+<tr>
+<th>属性</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>co_code</code></td>
+<td>原始字节码</td>
+</tr>
+<tr>
+<td><code>co_consts</code></td>
+<td>常量元组（嵌套函数的代码对象也在这里）</td>
+</tr>
+<tr>
+<td><code>co_names</code></td>
+<td>全局变量名、属性名</td>
+</tr>
+<tr>
+<td><code>co_varnames</code></td>
+<td>局部变量名（包括参数）</td>
+</tr>
+<tr>
+<td><code>co_cellvars</code> &#x2F; <code>co_freevars</code></td>
+<td>被内层函数捕获的变量 &#x2F; 从外层捕获的变量（第 07 篇）</td>
+</tr>
+<tr>
+<td><code>co_flags</code></td>
+<td>标志位：是否是生成器、协程，是否有 <code>*args</code> 等</td>
+</tr>
+<tr>
+<td><code>co_exceptiontable</code></td>
+<td>异常表（第 11 篇的“零开销异常”）</td>
+</tr>
+<tr>
+<td><code>co_firstlineno</code> &#x2F; <code>co_positions()</code></td>
+<td>源码位置信息</td>
+</tr>
+</tbody></table>
+<p>字节码中的指令只使用<strong>下标</strong>来引用这些表：<code>LOAD_CONST 0</code> 的意思是“加载 <code>co_consts[0]</code>”，<code>LOAD_FAST 2</code> 的意思是“加载第 2 个局部变量”。这让字节码非常紧凑。</p>
+<h3 id="2-标志位"><a href="#2-标志位" class="headerlink" title="2. 标志位"></a>2. 标志位</h3><pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">import</span> inspect
+<span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">def</span> <span class="token function">gen</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span> <span class="token keyword">yield</span> <span class="token number">1</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">async</span> <span class="token keyword">def</span> <span class="token function">coro</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span> <span class="token keyword">pass</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token operator">>></span><span class="token operator">></span> <span class="token builtin">bool</span><span class="token punctuation">(</span>gen<span class="token punctuation">.</span>__code__<span class="token punctuation">.</span>co_flags <span class="token operator">&amp;</span> inspect<span class="token punctuation">.</span>CO_GENERATOR<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token builtin">bool</span><span class="token punctuation">(</span>coro<span class="token punctuation">.</span>__code__<span class="token punctuation">.</span>co_flags <span class="token operator">&amp;</span> inspect<span class="token punctuation">.</span>CO_COROUTINE<span class="token punctuation">)</span>
+<span class="token punctuation">(</span><span class="token boolean">True</span><span class="token punctuation">,</span> <span class="token boolean">True</span><span class="token punctuation">)</span>
+<span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">def</span> <span class="token function">varargs</span><span class="token punctuation">(</span><span class="token operator">*</span>args<span class="token punctuation">,</span> <span class="token operator">**</span>kwargs<span class="token punctuation">)</span><span class="token punctuation">:</span> <span class="token keyword">pass</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token operator">>></span><span class="token operator">></span> <span class="token builtin">bool</span><span class="token punctuation">(</span>varargs<span class="token punctuation">.</span>__code__<span class="token punctuation">.</span>co_flags <span class="token operator">&amp;</span> inspect<span class="token punctuation">.</span>CO_VARARGS<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token builtin">bool</span><span class="token punctuation">(</span>varargs<span class="token punctuation">.</span>__code__<span class="token punctuation">.</span>co_flags <span class="token operator">&amp;</span> inspect<span class="token punctuation">.</span>CO_VARKEYWORDS<span class="token punctuation">)</span>
+<span class="token punctuation">(</span><span class="token boolean">True</span><span class="token punctuation">,</span> <span class="token boolean">True</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>一个函数是不是生成器，就是由编译器在 <code>co_flags</code> 中设置的 <code>CO_GENERATOR</code> 标志决定的——这正是“函数体中只要出现 <code>yield</code>，调用它就返回生成器”的实现方式（第 08 篇）。</p>
+<h3 id="3-精确的错误位置"><a href="#3-精确的错误位置" class="headerlink" title="3. 精确的错误位置"></a>3. 精确的错误位置</h3><p>3.11 起，代码对象为<strong>每一条指令</strong>都记录了它在源码中的起止行号和列号。这让回溯信息能够精确地指出出错的是哪个子表达式：</p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">def</span> <span class="token function">get_city</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span><span class="token punctuation">:</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     <span class="token keyword">return</span> data<span class="token punctuation">[</span><span class="token string">"user"</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token string">"address"</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token string">"city"</span><span class="token punctuation">]</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token operator">>></span><span class="token operator">></span> get_city<span class="token punctuation">(</span><span class="token punctuation">&#123;</span><span class="token string">"user"</span><span class="token punctuation">:</span> <span class="token punctuation">&#123;</span><span class="token string">"address"</span><span class="token punctuation">:</span> <span class="token boolean">None</span><span class="token punctuation">&#125;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+Traceback <span class="token punctuation">(</span>most recent call last<span class="token punctuation">)</span><span class="token punctuation">:</span>
+  <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+    <span class="token keyword">return</span> data<span class="token punctuation">[</span><span class="token string">"user"</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token string">"address"</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token string">"city"</span><span class="token punctuation">]</span>
+           <span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">~</span><span class="token operator">^</span><span class="token operator">^</span><span class="token operator">^</span><span class="token operator">^</span><span class="token operator">^</span><span class="token operator">^</span><span class="token operator">^</span><span class="token operator">^</span>
+TypeError<span class="token punctuation">:</span> <span class="token string">'NoneType'</span> <span class="token builtin">object</span> <span class="token keyword">is</span> <span class="token keyword">not</span> subscriptable<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>^^^^</code> 准确地指向了 <code>[&quot;city&quot;]</code> 这一步——是 <code>address</code> 为 <code>None</code>，而不是 <code>data</code> 或 <code>user</code>。在 3.10 及以前，你只能知道“这一行出错了”。这些位置信息可以通过 <code>co_positions()</code> 获取。</p>
+<h2 id="二、读懂-dis-的输出"><a href="#二、读懂-dis-的输出" class="headerlink" title="二、读懂 dis 的输出"></a>二、读懂 dis 的输出</h2><h3 id="1-一个完整的例子"><a href="#1-一个完整的例子" class="headerlink" title="1. 一个完整的例子"></a>1. 一个完整的例子</h3><pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token keyword">import</span> dis
+
+
+<span class="token keyword">def</span> <span class="token function">classify</span><span class="token punctuation">(</span>n<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">if</span> n <span class="token operator">&lt;</span> <span class="token number">0</span><span class="token punctuation">:</span>
+        <span class="token keyword">return</span> <span class="token string">"负数"</span>
+    <span class="token keyword">for</span> i <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">,</span> n<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token keyword">if</span> n <span class="token operator">%</span> i <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">:</span>
+            <span class="token keyword">return</span> <span class="token string">"合数"</span>
+    <span class="token keyword">return</span> <span class="token string">"质数或 0/1"</span>
+
+
+dis<span class="token punctuation">.</span>dis<span class="token punctuation">(</span>classify<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-text" data-language="text"><code class="language-text"> 4           RESUME                   0
+
+ 5           LOAD_FAST_BORROW         0 (n)
+             LOAD_SMALL_INT           0
+             COMPARE_OP              18 (bool(&lt;))
+             POP_JUMP_IF_FALSE        3 (to L1)
+             NOT_TAKEN
+
+ 6           LOAD_CONST               1 ('负数')
+             RETURN_VALUE
+
+ 7   L1:     LOAD_GLOBAL              1 (range + NULL)
+             LOAD_SMALL_INT           2
+             LOAD_FAST_BORROW         0 (n)
+             CALL                     2
+             GET_ITER
+     L2:     FOR_ITER                19 (to L4)
+             STORE_FAST               1 (i)
+
+ 8           LOAD_FAST_BORROW_LOAD_FAST_BORROW 1 (n, i)
+             BINARY_OP                6 (%)
+             LOAD_SMALL_INT           0
+             COMPARE_OP              88 (bool(==))
+             POP_JUMP_IF_TRUE         3 (to L3)
+             NOT_TAKEN
+             JUMP_BACKWARD           18 (to L2)
+
+ 9   L3:     POP_TOP
+             LOAD_CONST               2 ('合数')
+             RETURN_VALUE
+
+ 7   L4:     END_FOR
+             POP_ITER
+
+10           LOAD_CONST               3 ('质数或 0/1')
+             RETURN_VALUE<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>dis</code> 的输出分为几列：<strong>源码行号</strong>、<strong>跳转标签</strong>（<code>L1:</code> 表示这里是某个跳转的目标）、<strong>指令名</strong>、<strong>参数</strong>，以及括号中对参数的<strong>解释</strong>。</p>
+<p>逐段解读：</p>
+<ul>
+<li><strong>第 5 行</strong> <code>if n &lt; 0</code>：把 <code>n</code> 和 <code>0</code> 压栈，<code>COMPARE_OP</code> 弹出两者、比较后把布尔值压栈；<code>POP_JUMP_IF_FALSE</code> 弹出它，如果为假就跳到 <code>L1</code>（也就是 <code>for</code> 循环开始的地方）。<code>NOT_TAKEN</code> 是 3.14 新增的一个空操作，用来帮助性能分析工具记录“分支没有跳转”这一事件。</li>
+<li><strong>第 7 行</strong> <code>for i in range(2, n)</code>：<code>LOAD_GLOBAL</code> 加载全局名字 <code>range</code>，参数 <code>range + NULL</code> 表示它在 <code>range</code> 之后还额外压入了一个 <code>NULL</code>——这个空位是给“方法调用时的 <code>self</code>”预留的，普通函数调用时就留空。然后压入两个参数，<code>CALL 2</code> 调用 <code>range(2, n)</code>；<code>GET_ITER</code> 取得迭代器；<code>FOR_ITER</code> 每次取出下一个元素压栈，迭代结束时跳到 <code>L4</code>。</li>
+<li><strong>第 8 行</strong>：<code>LOAD_FAST_BORROW_LOAD_FAST_BORROW</code> 是一条<strong>超级指令</strong>，一次加载两个局部变量；<code>BINARY_OP 6 (%)</code> 取模；<code>JUMP_BACKWARD</code> 跳回 <code>L2</code> 进行下一轮循环。</li>
+<li><strong>第 9 行</strong>：<code>return &quot;合数&quot;</code> 前的 <code>POP_TOP</code> 把循环的迭代器从栈上弹掉——从循环中间 <code>return</code> 时，栈必须是干净的。</li>
+</ul>
+<p>可以看到，<code>if</code>、<code>for</code>、<code>while</code> 在字节码层面都变成了<strong>条件跳转</strong>和<strong>无条件跳转</strong>，和汇编语言中的分支和循环如出一辙。</p>
+<h3 id="2-基于栈的虚拟机"><a href="#2-基于栈的虚拟机" class="headerlink" title="2. 基于栈的虚拟机"></a>2. 基于栈的虚拟机</h3><p>CPython 的虚拟机是<strong>基于栈</strong>的：几乎所有指令都从<strong>值栈</strong>（value stack）的顶部取操作数，再把结果压回栈顶。<code>dis.stack_effect</code> 可以查询每条指令对栈深度的影响：</p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">import</span> dis
+<span class="token operator">>></span><span class="token operator">></span> dis<span class="token punctuation">.</span>stack_effect<span class="token punctuation">(</span>dis<span class="token punctuation">.</span>opmap<span class="token punctuation">[</span><span class="token string">"BINARY_OP"</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span>      <span class="token comment"># 弹出 2 个，压入 1 个</span>
+<span class="token operator">-</span><span class="token number">1</span>
+<span class="token operator">>></span><span class="token operator">></span> dis<span class="token punctuation">.</span>stack_effect<span class="token punctuation">(</span>dis<span class="token punctuation">.</span>opmap<span class="token punctuation">[</span><span class="token string">"LOAD_FAST"</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span>      <span class="token comment"># 压入 1 个</span>
+<span class="token number">1</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>编译器正是根据这些信息计算出了 <code>co_stacksize</code>，在创建帧时一次性分配好足够大的栈空间，执行过程中就不需要检查栈是否溢出了。</p>
+<p>基于栈的设计让指令格式简单、字节码紧凑、编译器容易实现，代价是同样的计算需要更多条指令（比如 <code>a + b</code> 需要 3 条：两次加载、一次相加）。Lua 5 和 Android 早期的 Dalvik 虚拟机则采用了<strong>基于寄存器</strong>的设计，指令数更少但每条指令更长。</p>
+<h2 id="三、帧：函数执行的现场"><a href="#三、帧：函数执行的现场" class="headerlink" title="三、帧：函数执行的现场"></a>三、帧：函数执行的现场</h2><p>代码对象是静态的“剧本”，<strong>帧</strong>（frame）则是一次具体执行的“现场”：它保存着局部变量的值、值栈、当前执行到哪条指令，以及指向调用者帧的指针。每调用一次函数，就创建一个新的帧；这些帧通过 <code>f_back</code> 链接成<strong>调用栈</strong>：</p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">import</span> sys
+<span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">def</span> <span class="token function">inner</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     frame <span class="token operator">=</span> sys<span class="token punctuation">.</span>_getframe<span class="token punctuation">(</span><span class="token punctuation">)</span>               <span class="token comment"># 获取当前帧</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     chain <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     <span class="token keyword">while</span> frame<span class="token punctuation">:</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>         chain<span class="token punctuation">.</span>append<span class="token punctuation">(</span>frame<span class="token punctuation">.</span>f_code<span class="token punctuation">.</span>co_name<span class="token punctuation">)</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>         frame <span class="token operator">=</span> frame<span class="token punctuation">.</span>f_back              <span class="token comment"># 顺着调用链向上</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     <span class="token keyword">return</span> chain<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token number">3</span><span class="token punctuation">]</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">def</span> <span class="token function">middle</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     local_var <span class="token operator">=</span> <span class="token number">42</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     <span class="token keyword">return</span> inner<span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">def</span> <span class="token function">outer</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     <span class="token keyword">return</span> middle<span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token operator">>></span><span class="token operator">></span> outer<span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">[</span><span class="token string">'inner'</span><span class="token punctuation">,</span> <span class="token string">'middle'</span><span class="token punctuation">,</span> <span class="token string">'outer'</span><span class="token punctuation">]</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>异常回溯（traceback）就是在异常传播时，沿途把每一层帧记录下来形成的链表；调试器通过帧读取和修改局部变量；<code>inspect.stack()</code>、日志模块中的“调用位置”信息都来自帧。</p>
+<p>在 3.11 之前，每次函数调用都会在堆上创建一个完整的帧<strong>对象</strong>，开销不小。3.11 起，解释器内部使用一种轻量的“内部帧”结构，连续地存放在一块预先分配好的内存中（类似 C 语言的调用栈），只有当 Python 代码真正需要访问帧对象时（比如调用 <code>sys._getframe()</code>、发生异常需要构建回溯），才<strong>惰性地</strong>创建对应的 Python 帧对象。这是 3.11 函数调用大幅提速的主要原因之一。</p>
+<h2 id="四、编译器的优化"><a href="#四、编译器的优化" class="headerlink" title="四、编译器的优化"></a>四、编译器的优化</h2><p>CPython 的编译器是一个相当“朴素”的编译器，它只做少量安全的优化：</p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">def</span> <span class="token function">f</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     <span class="token keyword">return</span> <span class="token number">24</span> <span class="token operator">*</span> <span class="token number">60</span> <span class="token operator">*</span> <span class="token number">60</span><span class="token punctuation">,</span> <span class="token string">"ab"</span> <span class="token operator">*</span> <span class="token number">3</span><span class="token punctuation">,</span> <span class="token keyword">not</span> <span class="token keyword">not</span> <span class="token boolean">True</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token operator">>></span><span class="token operator">></span> f<span class="token punctuation">.</span>__code__<span class="token punctuation">.</span>co_consts<span class="token punctuation">[</span><span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">]</span>               <span class="token comment"># 常量折叠：表达式在编译时就算好了</span>
+<span class="token punctuation">(</span><span class="token number">86400</span><span class="token punctuation">,</span> <span class="token string">'ababab'</span><span class="token punctuation">,</span> <span class="token boolean">True</span><span class="token punctuation">)</span>
+<span class="token operator">>></span><span class="token operator">></span> <span class="token keyword">def</span> <span class="token function">g</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     <span class="token keyword">if</span> __debug__<span class="token punctuation">:</span>                      <span class="token comment"># __debug__ 是编译时常量（-O 模式下为 False）</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>         <span class="token keyword">return</span> <span class="token string">"调试模式"</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>     <span class="token keyword">return</span> <span class="token string">"优化模式"</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token operator">>></span><span class="token operator">></span> <span class="token punctuation">[</span>i<span class="token punctuation">.</span>opname <span class="token keyword">for</span> i <span class="token keyword">in</span> dis<span class="token punctuation">.</span>get_instructions<span class="token punctuation">(</span>g<span class="token punctuation">)</span><span class="token punctuation">]</span>   <span class="token comment"># 永远不会执行的分支被直接删除了</span>
+<span class="token punctuation">[</span><span class="token string">'RESUME'</span><span class="token punctuation">,</span> <span class="token string">'NOP'</span><span class="token punctuation">,</span> <span class="token string">'LOAD_CONST'</span><span class="token punctuation">,</span> <span class="token string">'RETURN_VALUE'</span><span class="token punctuation">]</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>（那条 <code>NOP</code> 是被删除的 <code>if</code> 留下的占位，它让 <code>if __debug__:</code> 这一行依然对应着一条指令，以便调试器和覆盖率工具能正确地报告行号。）</p>
+<p>此外还有：死代码消除（<code>return</code> 之后的代码）、跳转链优化、把 <code>x in [1, 2, 3]</code> 中的列表常量转换为元组或 <code>frozenset</code>、超级指令的合并、3.12 的推导式内联等。</p>
+<p>为什么不做更激进的优化，比如函数内联、循环展开、公共子表达式消除？因为 Python 的<strong>动态性</strong>让这些优化几乎都不安全：<code>range</code> 可能在运行时被重新赋值成别的东西，<code>x + y</code> 可能调用任意的 <code>__add__</code> 方法并产生副作用，一个函数的代码甚至可以在运行时被替换。编译时能确定的信息太少了。于是 CPython 选择了另一条路：<strong>在运行时观察，在运行时优化</strong>。</p>
+<h2 id="五、自适应特化解释器（3-11-）"><a href="#五、自适应特化解释器（3-11-）" class="headerlink" title="五、自适应特化解释器（3.11+）"></a>五、自适应特化解释器（3.11+）</h2><h3 id="1-原理"><a href="#1-原理" class="headerlink" title="1. 原理"></a>1. 原理</h3><p>PEP 659 引入了<strong>特化的自适应解释器</strong>（specializing adaptive interpreter）。核心思想是：虽然 <code>BINARY_OP +</code> 理论上可以作用于任何类型，但在一个具体程序的具体位置，它<strong>几乎总是</strong>作用于同样的类型。解释器会：</p>
+<ol>
+<li>执行几次某条通用指令，观察它实际处理的数据类型；</li>
+<li>把它原地<strong>替换</strong>为针对这种类型的特化指令（比如 <code>BINARY_OP_ADD_INT</code>，只处理两个 <code>int</code> 相加，省去了类型分派的开销）；</li>
+<li>特化指令在执行前会做一个很便宜的<strong>守卫检查</strong>（guard）。如果某一次类型不符合预期，就执行一个“去优化”（deoptimize）的回退路径；多次失败后，会重新回到通用指令并尝试新的特化。</li>
+</ol>
+<p>为了支持这一机制，指令后面附带了若干个“<strong>内联缓存</strong>”（inline cache）单元，用来存放特化需要的信息，比如属性在对象中的偏移量、全局字典的版本号等。</p>
+<h3 id="2-亲眼看到特化"><a href="#2-亲眼看到特化" class="headerlink" title="2. 亲眼看到特化"></a>2. 亲眼看到特化</h3><p><code>dis.dis</code> 的 <code>adaptive=True</code> 参数可以显示特化后的指令：</p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token keyword">import</span> dis
+
+
+<span class="token keyword">def</span> <span class="token function">total</span><span class="token punctuation">(</span>items<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    s <span class="token operator">=</span> <span class="token number">0</span>
+    <span class="token keyword">for</span> x <span class="token keyword">in</span> items<span class="token punctuation">:</span>
+        s <span class="token operator">=</span> s <span class="token operator">+</span> x
+    <span class="token keyword">return</span> s
+
+
+<span class="token keyword">def</span> <span class="token function">show</span><span class="token punctuation">(</span>title<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    ops <span class="token operator">=</span> <span class="token punctuation">[</span>i<span class="token punctuation">.</span>opname <span class="token keyword">for</span> i <span class="token keyword">in</span> dis<span class="token punctuation">.</span>get_instructions<span class="token punctuation">(</span>total<span class="token punctuation">,</span> adaptive<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span><span class="token punctuation">]</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string-interpolation"><span class="token string">f"</span><span class="token interpolation"><span class="token punctuation">&#123;</span>title<span class="token punctuation">:</span><span class="token format-spec">&lt;14</span><span class="token punctuation">&#125;</span></span><span class="token string">"</span></span><span class="token punctuation">,</span> <span class="token punctuation">[</span>op <span class="token keyword">for</span> op <span class="token keyword">in</span> ops <span class="token keyword">if</span> op<span class="token punctuation">.</span>startswith<span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token string">"FOR_ITER"</span><span class="token punctuation">,</span> <span class="token string">"BINARY_OP"</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+
+
+show<span class="token punctuation">(</span><span class="token string">"刚定义时"</span><span class="token punctuation">)</span>
+<span class="token keyword">for</span> _ <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span><span class="token number">1000</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    total<span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">,</span> <span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">)</span>              <span class="token comment"># 用整数列表“预热”</span>
+show<span class="token punctuation">(</span><span class="token string">"整数预热后"</span><span class="token punctuation">)</span>
+<span class="token keyword">for</span> _ <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span><span class="token number">1000</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    total<span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token number">0.5</span><span class="token punctuation">,</span> <span class="token number">1.5</span><span class="token punctuation">]</span><span class="token punctuation">)</span>             <span class="token comment"># 改用浮点数：int + float 的组合</span>
+show<span class="token punctuation">(</span><span class="token string">"换成浮点数后"</span><span class="token punctuation">)</span>
+<span class="token keyword">for</span> _ <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span><span class="token number">1000</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    total<span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">,</span> <span class="token number">3</span><span class="token punctuation">)</span><span class="token punctuation">)</span>              <span class="token comment"># 改用元组</span>
+show<span class="token punctuation">(</span><span class="token string">"换成元组后"</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-text" data-language="text"><code class="language-text">刚定义时           ['FOR_ITER', 'BINARY_OP']
+整数预热后          ['FOR_ITER_LIST', 'BINARY_OP_ADD_INT']
+换成浮点数后         ['FOR_ITER_LIST', 'BINARY_OP_EXTEND']
+换成元组后          ['FOR_ITER_TUPLE', 'BINARY_OP_ADD_INT']<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>整个过程完全自动、对程序透明：</p>
+<ul>
+<li>用整数列表调用后，<code>FOR_ITER</code> 被特化为专门遍历列表的 <code>FOR_ITER_LIST</code>，<code>BINARY_OP</code> 被特化为 <code>BINARY_OP_ADD_INT</code>；</li>
+<li>改用浮点数后，<code>s = 0 + 0.5</code> 是 <code>int + float</code> 的混合运算，<code>ADD_INT</code> 的守卫失败，指令被重新特化为能处理更多类型组合的 <code>BINARY_OP_EXTEND</code>；</li>
+<li>改用元组后，循环指令变成了 <code>FOR_ITER_TUPLE</code>；而元组中的元素又都是整数了，于是加法指令也被<strong>重新特化</strong>回了 <code>BINARY_OP_ADD_INT</code>。</li>
+</ul>
+<p>属性访问是特化收益最大的地方之一。比如 <code>obj.attr</code> 会被特化为 <code>LOAD_ATTR_INSTANCE_VALUE</code>：它在内联缓存中记录了对象类型的版本号和属性在实例中的偏移量，下次执行时只要类型没有变化，就直接按偏移量读取，完全跳过第 14 篇讲的那一整套描述符查找流程。</p>
+<p>这也给了我们一条性能建议：<strong>保持代码中各处使用的类型稳定</strong>（“类型单态”）。一个时而处理 <code>int</code>、时而处理 <code>str</code> 的函数，更难被有效地特化。</p>
+<h3 id="3-更进一步：JIT"><a href="#3-更进一步：JIT" class="headerlink" title="3. 更进一步：JIT"></a>3. 更进一步：JIT</h3><p>3.13 起，CPython 加入了实验性的 <strong>JIT 编译器</strong>（PEP 744）。它使用一种叫做 “copy-and-patch” 的技术：在构建 CPython 时，预先用 LLVM 把每条“微指令”编译成机器码模板；运行时，把热点代码对应的模板拼接起来，填入具体的参数，就得到了可以直接执行的机器码。它建立在特化解释器的基础之上：先由特化解释器收集类型信息、形成热点路径，再由 JIT 编译成机器码。JIT 目前默认是关闭的，可以通过环境变量 <code>PYTHON_JIT=1</code> 在支持它的构建中启用。此外，3.14 还支持在使用较新版本 Clang 编译时，采用“尾调用”方式实现的解释器主循环，在部分平台上能带来几个百分点的提速。</p>
+<h2 id="六、动手：用-Python-写一个字节码虚拟机"><a href="#六、动手：用-Python-写一个字节码虚拟机" class="headerlink" title="六、动手：用 Python 写一个字节码虚拟机"></a>六、动手：用 Python 写一个字节码虚拟机</h2><p>理解解释器最好的方法，是自己写一个。下面的 <code>run</code> 函数用 Python 实现了一个迷你虚拟机，它读取一个<strong>真实的 CPython 函数</strong>的字节码，用一个列表作为值栈，用一个字典存放局部变量，逐条解释执行：</p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token keyword">import</span> builtins
+<span class="token keyword">import</span> dis
+<span class="token keyword">import</span> operator
+
+NULL <span class="token operator">=</span> <span class="token builtin">object</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+BINARY_OPS <span class="token operator">=</span> <span class="token punctuation">&#123;</span><span class="token string">"+"</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>add<span class="token punctuation">,</span> <span class="token string">"-"</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>sub<span class="token punctuation">,</span> <span class="token string">"*"</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>mul<span class="token punctuation">,</span> <span class="token string">"/"</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>truediv<span class="token punctuation">,</span>
+              <span class="token string">"//"</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>floordiv<span class="token punctuation">,</span> <span class="token string">"%"</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>mod<span class="token punctuation">,</span> <span class="token string">"+="</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>iadd<span class="token punctuation">,</span> <span class="token string">"*="</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>imul<span class="token punctuation">&#125;</span>
+COMPARE_OPS <span class="token operator">=</span> <span class="token punctuation">&#123;</span><span class="token string">"&lt;"</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>lt<span class="token punctuation">,</span> <span class="token string">"&lt;="</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>le<span class="token punctuation">,</span> <span class="token string">"=="</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>eq<span class="token punctuation">,</span> <span class="token string">"!="</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>ne<span class="token punctuation">,</span>
+               <span class="token string">">"</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>gt<span class="token punctuation">,</span> <span class="token string">">="</span><span class="token punctuation">:</span> operator<span class="token punctuation">.</span>ge<span class="token punctuation">&#125;</span>
+
+
+<span class="token keyword">def</span> <span class="token function">run</span><span class="token punctuation">(</span>func<span class="token punctuation">,</span> <span class="token operator">*</span>args<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token triple-quoted-string string">"""用 Python 解释执行 func 的字节码（只支持一小部分指令）。"""</span>
+    instructions <span class="token operator">=</span> <span class="token builtin">list</span><span class="token punctuation">(</span>dis<span class="token punctuation">.</span>get_instructions<span class="token punctuation">(</span>func<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    index_of <span class="token operator">=</span> <span class="token punctuation">&#123;</span>ins<span class="token punctuation">.</span>offset<span class="token punctuation">:</span> i <span class="token keyword">for</span> i<span class="token punctuation">,</span> ins <span class="token keyword">in</span> <span class="token builtin">enumerate</span><span class="token punctuation">(</span>instructions<span class="token punctuation">)</span><span class="token punctuation">&#125;</span>   <span class="token comment"># 字节偏移 → 指令下标</span>
+    local_vars <span class="token operator">=</span> <span class="token builtin">dict</span><span class="token punctuation">(</span><span class="token builtin">zip</span><span class="token punctuation">(</span>func<span class="token punctuation">.</span>__code__<span class="token punctuation">.</span>co_varnames<span class="token punctuation">,</span> args<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    stack<span class="token punctuation">,</span> pc<span class="token punctuation">,</span> executed <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">0</span>
+    <span class="token keyword">while</span> <span class="token boolean">True</span><span class="token punctuation">:</span>
+        ins <span class="token operator">=</span> instructions<span class="token punctuation">[</span>pc<span class="token punctuation">]</span>                    <span class="token comment"># 取指令</span>
+        op<span class="token punctuation">,</span> arg <span class="token operator">=</span> ins<span class="token punctuation">.</span>opname<span class="token punctuation">,</span> ins<span class="token punctuation">.</span>argval
+        pc <span class="token operator">+=</span> <span class="token number">1</span>
+        executed <span class="token operator">+=</span> <span class="token number">1</span>
+        <span class="token keyword">if</span> op <span class="token keyword">in</span> <span class="token punctuation">(</span><span class="token string">"RESUME"</span><span class="token punctuation">,</span> <span class="token string">"NOP"</span><span class="token punctuation">,</span> <span class="token string">"NOT_TAKEN"</span><span class="token punctuation">,</span> <span class="token string">"END_FOR"</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            <span class="token keyword">pass</span>
+        <span class="token keyword">elif</span> op <span class="token keyword">in</span> <span class="token punctuation">(</span><span class="token string">"LOAD_CONST"</span><span class="token punctuation">,</span> <span class="token string">"LOAD_SMALL_INT"</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            stack<span class="token punctuation">.</span>append<span class="token punctuation">(</span>arg<span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> op<span class="token punctuation">.</span>count<span class="token punctuation">(</span><span class="token string">"LOAD_FAST"</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">2</span><span class="token punctuation">:</span>          <span class="token comment"># 超级指令：一次加载两个局部变量</span>
+            stack<span class="token punctuation">.</span>extend<span class="token punctuation">(</span>local_vars<span class="token punctuation">[</span>name<span class="token punctuation">]</span> <span class="token keyword">for</span> name <span class="token keyword">in</span> arg<span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> op<span class="token punctuation">.</span>startswith<span class="token punctuation">(</span><span class="token string">"LOAD_FAST"</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            stack<span class="token punctuation">.</span>append<span class="token punctuation">(</span>local_vars<span class="token punctuation">[</span>arg<span class="token punctuation">]</span><span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> op <span class="token operator">==</span> <span class="token string">"STORE_FAST"</span><span class="token punctuation">:</span>
+            local_vars<span class="token punctuation">[</span>arg<span class="token punctuation">]</span> <span class="token operator">=</span> stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> op <span class="token operator">==</span> <span class="token string">"LOAD_GLOBAL"</span><span class="token punctuation">:</span>
+            stack<span class="token punctuation">.</span>append<span class="token punctuation">(</span>func<span class="token punctuation">.</span>__globals__<span class="token punctuation">.</span>get<span class="token punctuation">(</span>arg<span class="token punctuation">,</span> <span class="token builtin">getattr</span><span class="token punctuation">(</span>builtins<span class="token punctuation">,</span> arg<span class="token punctuation">,</span> <span class="token boolean">None</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+            <span class="token keyword">if</span> ins<span class="token punctuation">.</span>arg <span class="token operator">&amp;</span> <span class="token number">1</span><span class="token punctuation">:</span>                       <span class="token comment"># 参数最低位为 1：再压入一个 NULL</span>
+                stack<span class="token punctuation">.</span>append<span class="token punctuation">(</span>NULL<span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> op <span class="token operator">==</span> <span class="token string">"CALL"</span><span class="token punctuation">:</span>
+            call_args <span class="token operator">=</span> <span class="token punctuation">[</span>stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">for</span> _ <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span>arg<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token punctuation">:</span><span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">]</span>
+            self_or_null<span class="token punctuation">,</span> callee <span class="token operator">=</span> stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token keyword">if</span> self_or_null <span class="token keyword">is</span> <span class="token keyword">not</span> NULL<span class="token punctuation">:</span>
+                call_args<span class="token punctuation">.</span>insert<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> self_or_null<span class="token punctuation">)</span>
+            stack<span class="token punctuation">.</span>append<span class="token punctuation">(</span>callee<span class="token punctuation">(</span><span class="token operator">*</span>call_args<span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> op <span class="token operator">==</span> <span class="token string">"BINARY_OP"</span><span class="token punctuation">:</span>
+            b<span class="token punctuation">,</span> a <span class="token operator">=</span> stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span>       <span class="token comment"># 注意顺序：先弹出的是右操作数</span>
+            stack<span class="token punctuation">.</span>append<span class="token punctuation">(</span>BINARY_OPS<span class="token punctuation">[</span>ins<span class="token punctuation">.</span>argrepr<span class="token punctuation">]</span><span class="token punctuation">(</span>a<span class="token punctuation">,</span> b<span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> op <span class="token operator">==</span> <span class="token string">"COMPARE_OP"</span><span class="token punctuation">:</span>
+            b<span class="token punctuation">,</span> a <span class="token operator">=</span> stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span>
+            stack<span class="token punctuation">.</span>append<span class="token punctuation">(</span>COMPARE_OPS<span class="token punctuation">[</span>ins<span class="token punctuation">.</span>argrepr<span class="token punctuation">.</span>removeprefix<span class="token punctuation">(</span><span class="token string">"bool("</span><span class="token punctuation">)</span><span class="token punctuation">.</span>removesuffix<span class="token punctuation">(</span><span class="token string">")"</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">(</span>a<span class="token punctuation">,</span> b<span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> op <span class="token operator">==</span> <span class="token string">"TO_BOOL"</span><span class="token punctuation">:</span>
+            stack<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token builtin">bool</span><span class="token punctuation">(</span>stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> op <span class="token operator">==</span> <span class="token string">"POP_JUMP_IF_FALSE"</span><span class="token punctuation">:</span>
+            <span class="token keyword">if</span> <span class="token keyword">not</span> stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+                pc <span class="token operator">=</span> index_of<span class="token punctuation">[</span>arg<span class="token punctuation">]</span>
+        <span class="token keyword">elif</span> op <span class="token operator">==</span> <span class="token string">"POP_JUMP_IF_TRUE"</span><span class="token punctuation">:</span>
+            <span class="token keyword">if</span> stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+                pc <span class="token operator">=</span> index_of<span class="token punctuation">[</span>arg<span class="token punctuation">]</span>
+        <span class="token keyword">elif</span> op <span class="token keyword">in</span> <span class="token punctuation">(</span><span class="token string">"JUMP_FORWARD"</span><span class="token punctuation">,</span> <span class="token string">"JUMP_BACKWARD"</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            pc <span class="token operator">=</span> index_of<span class="token punctuation">[</span>arg<span class="token punctuation">]</span>
+        <span class="token keyword">elif</span> op <span class="token operator">==</span> <span class="token string">"GET_ITER"</span><span class="token punctuation">:</span>
+            stack<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token builtin">iter</span><span class="token punctuation">(</span>stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> op <span class="token operator">==</span> <span class="token string">"FOR_ITER"</span><span class="token punctuation">:</span>
+            <span class="token keyword">try</span><span class="token punctuation">:</span>
+                stack<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token builtin">next</span><span class="token punctuation">(</span>stack<span class="token punctuation">[</span><span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">)</span>     <span class="token comment"># 迭代器留在栈上，下一个元素压在它上面</span>
+            <span class="token keyword">except</span> StopIteration<span class="token punctuation">:</span>
+                pc <span class="token operator">=</span> index_of<span class="token punctuation">[</span>arg<span class="token punctuation">]</span>                <span class="token comment"># 迭代结束：跳到循环之后</span>
+        <span class="token keyword">elif</span> op <span class="token keyword">in</span> <span class="token punctuation">(</span><span class="token string">"POP_ITER"</span><span class="token punctuation">,</span> <span class="token string">"POP_TOP"</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> op <span class="token operator">==</span> <span class="token string">"RETURN_VALUE"</span><span class="token punctuation">:</span>
+            <span class="token keyword">return</span> stack<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> executed
+        <span class="token keyword">else</span><span class="token punctuation">:</span>
+            <span class="token keyword">raise</span> NotImplementedError<span class="token punctuation">(</span>op<span class="token punctuation">)</span>
+
+
+<span class="token keyword">def</span> <span class="token function">sum_even_squares</span><span class="token punctuation">(</span>n<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    total <span class="token operator">=</span> <span class="token number">0</span>
+    <span class="token keyword">for</span> i <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span>n<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token keyword">if</span> i <span class="token operator">%</span> <span class="token number">2</span> <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">:</span>
+            total <span class="token operator">+=</span> i <span class="token operator">*</span> i
+    <span class="token keyword">return</span> total
+
+
+<span class="token keyword">def</span> <span class="token function">collatz_steps</span><span class="token punctuation">(</span>n<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    steps <span class="token operator">=</span> <span class="token number">0</span>
+    <span class="token keyword">while</span> n <span class="token operator">!=</span> <span class="token number">1</span><span class="token punctuation">:</span>
+        <span class="token keyword">if</span> n <span class="token operator">%</span> <span class="token number">2</span><span class="token punctuation">:</span>
+            n <span class="token operator">=</span> <span class="token number">3</span> <span class="token operator">*</span> n <span class="token operator">+</span> <span class="token number">1</span>
+        <span class="token keyword">else</span><span class="token punctuation">:</span>
+            n <span class="token operator">=</span> n <span class="token operator">//</span> <span class="token number">2</span>
+        steps <span class="token operator">+=</span> <span class="token number">1</span>
+    <span class="token keyword">return</span> steps
+
+
+<span class="token keyword">for</span> f<span class="token punctuation">,</span> arg <span class="token keyword">in</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>sum_even_squares<span class="token punctuation">,</span> <span class="token number">10</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token punctuation">(</span>collatz_steps<span class="token punctuation">,</span> <span class="token number">27</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    result<span class="token punctuation">,</span> executed <span class="token operator">=</span> run<span class="token punctuation">(</span>f<span class="token punctuation">,</span> arg<span class="token punctuation">)</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string-interpolation"><span class="token string">f"</span><span class="token interpolation"><span class="token punctuation">&#123;</span>f<span class="token punctuation">.</span>__name__<span class="token punctuation">&#125;</span></span><span class="token string">(</span><span class="token interpolation"><span class="token punctuation">&#123;</span>arg<span class="token punctuation">&#125;</span></span><span class="token string">) = </span><span class="token interpolation"><span class="token punctuation">&#123;</span>result<span class="token punctuation">&#125;</span></span><span class="token string">，与真实执行一致: </span><span class="token interpolation"><span class="token punctuation">&#123;</span>result <span class="token operator">==</span> f<span class="token punctuation">(</span>arg<span class="token punctuation">)</span><span class="token punctuation">&#125;</span></span><span class="token string">，"</span></span>
+          <span class="token string-interpolation"><span class="token string">f"共解释执行 </span><span class="token interpolation"><span class="token punctuation">&#123;</span>executed<span class="token punctuation">&#125;</span></span><span class="token string"> 条指令"</span></span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-text" data-language="text"><code class="language-text">sum_even_squares(10) = 120，与真实执行一致: True，共解释执行 132 条指令
+collatz_steps(27) = 111，与真实执行一致: True，共解释执行 2282 条指令<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+<p>不到一百行代码，我们的虚拟机就能正确运行包含循环、分支、函数调用的真实 Python 函数。它的主体结构——<strong>取指令、按操作码分派、操作值栈、修改程序计数器</strong>——和 CPython 用 C 编写的主循环（<code>Python/ceval.c</code> 及由 <code>Python/bytecodes.c</code> 生成的代码）完全相同，只是后者支持两百多种指令，并且用 C 语言、“计算跳转”（computed goto）等技术把每条指令的分派开销降到了最低。</p>
+<p>这个小实验也直观地展示了解释执行的开销：计算 <code>collatz_steps(27)</code> 只需要 111 次循环，却执行了 2282 条字节码指令，每条指令背后都有取指、分派、引用计数、类型检查等工作。这就是为什么在 CPython 中，<strong>“把工作交给内置函数和 C 实现的库”</strong> 往往是最有效的优化手段，我们会在下一篇详细讨论。</p>
+<h2 id="七、sys-monitoring：低开销的执行监控"><a href="#七、sys-monitoring：低开销的执行监控" class="headerlink" title="七、sys.monitoring：低开销的执行监控"></a>七、sys.monitoring：低开销的执行监控</h2><p>调试器、性能分析器、代码覆盖率工具都需要“监视”程序的执行。传统的 <code>sys.settrace</code> 会在<strong>每一行</strong>、每一次调用时都调用一个 Python 回调函数，开销极大（让程序慢上数十倍）。3.12 引入的 <code>sys.monitoring</code>（PEP 669）提供了一种低开销的方案：工具可以<strong>只为特定的代码对象</strong>开启<strong>特定的事件</strong>，并且回调可以返回 <code>DISABLE</code> 来关闭某个位置的后续事件（覆盖率工具只需要知道某行“是否执行过”，记录一次后就可以关闭它）。没有开启监控的代码完全没有额外开销。</p>
+<p>下面用它实现一个简单的“行执行计数器”：</p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token keyword">import</span> sys
+<span class="token keyword">from</span> collections <span class="token keyword">import</span> Counter
+
+mon <span class="token operator">=</span> sys<span class="token punctuation">.</span>monitoring
+TOOL <span class="token operator">=</span> mon<span class="token punctuation">.</span>PROFILER_ID
+
+
+<span class="token keyword">def</span> <span class="token function">fizzbuzz</span><span class="token punctuation">(</span>n<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    out <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span>
+    <span class="token keyword">for</span> i <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> n <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token keyword">if</span> i <span class="token operator">%</span> <span class="token number">15</span> <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">:</span>
+            out<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token string">"FizzBuzz"</span><span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> i <span class="token operator">%</span> <span class="token number">3</span> <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">:</span>
+            out<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token string">"Fizz"</span><span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> i <span class="token operator">%</span> <span class="token number">5</span> <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">:</span>
+            out<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token string">"Buzz"</span><span class="token punctuation">)</span>
+        <span class="token keyword">else</span><span class="token punctuation">:</span>
+            out<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token builtin">str</span><span class="token punctuation">(</span>i<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token keyword">return</span> out
+
+
+hits <span class="token operator">=</span> Counter<span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+
+<span class="token keyword">def</span> <span class="token function">on_line</span><span class="token punctuation">(</span>code<span class="token punctuation">,</span> line_number<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    hits<span class="token punctuation">[</span>line_number <span class="token operator">-</span> code<span class="token punctuation">.</span>co_firstlineno<span class="token punctuation">]</span> <span class="token operator">+=</span> <span class="token number">1</span>      <span class="token comment"># 记录相对于函数第一行的行号</span>
+
+
+mon<span class="token punctuation">.</span>use_tool_id<span class="token punctuation">(</span>TOOL<span class="token punctuation">,</span> <span class="token string">"line-counter"</span><span class="token punctuation">)</span>
+mon<span class="token punctuation">.</span>register_callback<span class="token punctuation">(</span>TOOL<span class="token punctuation">,</span> mon<span class="token punctuation">.</span>events<span class="token punctuation">.</span>LINE<span class="token punctuation">,</span> on_line<span class="token punctuation">)</span>
+mon<span class="token punctuation">.</span>set_local_events<span class="token punctuation">(</span>TOOL<span class="token punctuation">,</span> fizzbuzz<span class="token punctuation">.</span>__code__<span class="token punctuation">,</span> mon<span class="token punctuation">.</span>events<span class="token punctuation">.</span>LINE<span class="token punctuation">)</span>   <span class="token comment"># 只监控这一个函数</span>
+fizzbuzz<span class="token punctuation">(</span><span class="token number">30</span><span class="token punctuation">)</span>
+mon<span class="token punctuation">.</span>set_local_events<span class="token punctuation">(</span>TOOL<span class="token punctuation">,</span> fizzbuzz<span class="token punctuation">.</span>__code__<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span>
+mon<span class="token punctuation">.</span>free_tool_id<span class="token punctuation">(</span>TOOL<span class="token punctuation">)</span>
+
+<span class="token keyword">for</span> offset <span class="token keyword">in</span> <span class="token builtin">sorted</span><span class="token punctuation">(</span>hits<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string-interpolation"><span class="token string">f"第 </span><span class="token interpolation"><span class="token punctuation">&#123;</span>offset<span class="token punctuation">:</span><span class="token format-spec">>2</span><span class="token punctuation">&#125;</span></span><span class="token string"> 行  执行 </span><span class="token interpolation"><span class="token punctuation">&#123;</span>hits<span class="token punctuation">[</span>offset<span class="token punctuation">]</span><span class="token punctuation">:</span><span class="token format-spec">>2</span><span class="token punctuation">&#125;</span></span><span class="token string"> 次"</span></span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-text" data-language="text"><code class="language-text">第  1 行  执行  1 次
+第  2 行  执行 31 次
+第  3 行  执行 30 次
+第  4 行  执行  2 次
+第  5 行  执行 28 次
+第  6 行  执行  8 次
+第  7 行  执行 20 次
+第  8 行  执行  4 次
+第 10 行  执行 16 次
+第 11 行  执行  1 次<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>（<code>for</code> 那一行执行了 31 次，因为最后一次检测到迭代结束；<code>else:</code> 那一行本身不对应任何指令，所以没有记录。）现代的 <code>coverage.py</code> 在 3.12 之后正是使用 <code>sys.monitoring</code> 来大幅降低覆盖率统计的开销的。</p>
+<h2 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h2><ul>
+<li>代码对象是不可变的编译产物，包含字节码和常量、名字、变量名等表；<code>co_flags</code> 标记生成器、协程；3.11 起记录每条指令的精确源码位置。</li>
+<li>CPython 是基于栈的虚拟机，<code>if</code>&#x2F;<code>for</code> 在字节码中变成跳转；帧保存一次执行的现场并组成调用栈，3.11 起帧对象惰性创建。</li>
+<li>编译器只做常量折叠、死代码消除等安全的优化，因为 Python 的动态性让激进优化不安全。</li>
+<li>3.11 的自适应特化解释器在运行时根据观察到的类型，把通用指令替换为特化指令（如 <code>BINARY_OP_ADD_INT</code>），守卫失败时去优化；3.13 起有实验性的 JIT。</li>
+<li>解释器主循环就是“取指—分派—执行”，我们用不到 100 行 Python 就能实现一个能运行真实字节码的虚拟机。</li>
+<li><code>sys.monitoring</code> 提供了按需开启、低开销的执行监控接口。</li>
+</ul>
+<h2 id="练习"><a href="#练习" class="headerlink" title="练习"></a>练习</h2><ol>
+<li>扩展本文的迷你虚拟机，让它支持 <code>BUILD_LIST</code>、<code>LIST_APPEND</code>、<code>BINARY_SUBSCR</code>（在 3.14 中下标访问也是 <code>BINARY_OP</code>，请先用 <code>dis</code> 确认）、<code>LOAD_ATTR</code>（方法调用），使它能运行一个对列表排序的冒泡排序函数。</li>
+<li>用 <code>dis</code> 比较 <code>[x * 2 for x in data]</code>、<code>list(map(lambda x: x * 2, data))</code> 和普通 <code>for</code> 循环 + <code>append</code> 三种写法的字节码，结合 <code>timeit</code> 的测量结果，解释它们的性能差异。</li>
+<li>写一个函数，预热后用 <code>dis.get_instructions(f, adaptive=True)</code> 统计其中有多少条指令被成功特化。然后让它处理混合类型的数据，观察特化指令的变化。</li>
+<li>使用 <code>sys.monitoring</code> 实现一个简单的函数调用分析器：统计每个 Python 函数被调用的次数（提示：使用 <code>PY_START</code> 事件）。</li>
+<li>阅读 CPython 源码中 <code>Python/bytecodes.c</code> 里 <code>BINARY_OP_ADD_INT</code> 的定义（可以在 GitHub 上在线阅读），找出它的守卫条件和快速路径分别是什么。</li>
+</ol>
+<p>下一篇，我们将把这些底层知识用于实战：<a href="/blog/2026/10/07/Python-21-Performance/" title="Python 从入门到精通（21）：性能分析与优化">性能分析与优化</a>。</p>
+
+                
+            </div>
+            <hr/>
+
+            
+
+
+
+            <div class="tag_share" style="display: block;">
+                <div class="post-meta__tag-list" style="display: inline-block;">
+                    
+                        <div class="article-tag">
+                            
+                                <a href="/blog/tags/Python/">
+                                    <span class="chip bg-color">Python</span>
+                                </a>
+                            
+                                <a href="/blog/tags/Python%E9%AB%98%E7%BA%A7/">
+                                    <span class="chip bg-color">Python高级</span>
+                                </a>
+                            
+                        </div>
+                    
+                </div>
+                <div class="post_share" style="zoom: 80%; width: fit-content; display: inline-block; float: right; margin: -0.15rem 0;">
+                    <link rel="stylesheet" type="text/css" href="/blog/libs/share/css/share.min.css">
+<div id="article-share">
+
+    
+    <div class="social-share" data-sites="qq,wechat,weibo" data-wechat-qrcode-helper="<p>微信扫一扫即可分享！</p>"></div>
+    <script src="/blog/libs/share/js/social-share.min.js"></script>
+    
+
+    
+
+</div>
+
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+<article id="prenext-posts" class="prev-next articles">
+    <div class="row article-row">
+        
+        <div class="article col s12 m6" data-aos="fade-up">
+            <div class="article-badge left-badge text-color">
+                <i class="fas fa-chevron-left"></i>&nbsp;上一篇</div>
+            <div class="card">
+                <a href="/blog/2026/10/07/Python-19-Memory-and-GC/">
+                    <div class="card-image">
+                        
+                        
+                        <img src="/blog/medias/featureimages/17.jpg" class="responsive-img" alt="Python 从入门到精通（19）：内存管理与垃圾回收">
+                        
+                        <span class="card-title">Python 从入门到精通（19）：内存管理与垃圾回收</span>
+                    </div>
+                </a>
+                <div class="card-content article-content">
+                    <div class="summary block-with-text">
+                        
+                            CPython 内存管理的全景：引用计数何时增减、确定性析构；循环引用与分代回收的“减去内部引用”算法、哪些对象被 GC 追踪、gc.freeze；__del__ 的陷阱与 weakref；pymalloc 的 arena/pool/block 三层结构（3.14 实测 1 MiB/16 KiB/512 B）与“内存不还给系统”的原因；用 tracemalloc 定位内存泄漏，以及常见的泄漏模式。
+                        
+                    </div>
+                    <div class="publish-info">
+                        <span class="publish-date">
+                            <i class="far fa-clock fa-fw icon-date"></i>2026-10-07
+                        </span>
+                        <span class="publish-author">
+                            
+                            <i class="fas fa-bookmark fa-fw icon-category"></i>
+                            
+                            <a href="/blog/categories/Python/" class="post-category">
+                                    Python
+                                </a>
+                            
+                            
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="card-action article-tags">
+                    
+                    <a href="/blog/tags/Python/">
+                        <span class="chip bg-color">Python</span>
+                    </a>
+                    
+                    <a href="/blog/tags/Python%E9%AB%98%E7%BA%A7/">
+                        <span class="chip bg-color">Python高级</span>
+                    </a>
+                    
+                </div>
+                
+            </div>
+        </div>
+        
+        
+        <div class="article col s12 m6" data-aos="fade-up">
+            <div class="article-badge right-badge text-color">
+                下一篇&nbsp;<i class="fas fa-chevron-right"></i>
+            </div>
+            <div class="card">
+                <a href="/blog/2026/10/07/Python-21-Performance/">
+                    <div class="card-image">
+                        
+                        
+                        <img src="/blog/medias/featureimages/3.jpg" class="responsive-img" alt="Python 从入门到精通（21）：性能分析与优化">
+                        
+                        <span class="card-title">Python 从入门到精通（21）：性能分析与优化</span>
+                    </div>
+                </a>
+                <div class="card-content article-content">
+                    <div class="summary block-with-text">
+                        
+                            优化的正确顺序：先测量、再算法、再数据结构、最后才是微观技巧。timeit 与 cProfile 的正确用法，一次完整的“剖析—定位—修复”过程；实测对比：算法改进带来 554 倍、NumPy 与 C 扩展带来约 70 倍、而传统的微观优化在 3.14 上只剩约 1.1 倍；最后介绍 Cython、mypyc、PyPy、Numba 与 Rust 扩展。
+                        
+                    </div>
+                    <div class="publish-info">
+                            <span class="publish-date">
+                                <i class="far fa-clock fa-fw icon-date"></i>2026-10-07
+                            </span>
+                        <span class="publish-author">
+                            
+                            <i class="fas fa-bookmark fa-fw icon-category"></i>
+                            
+                            <a href="/blog/categories/Python/" class="post-category">
+                                    Python
+                                </a>
+                            
+                            
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="card-action article-tags">
+                    
+                    <a href="/blog/tags/Python/">
+                        <span class="chip bg-color">Python</span>
+                    </a>
+                    
+                    <a href="/blog/tags/Python%E9%AB%98%E7%BA%A7/">
+                        <span class="chip bg-color">Python高级</span>
+                    </a>
+                    
+                </div>
+                
+            </div>
+        </div>
+        
+    </div>
+</article>
+
+</div>
+
+
+
+<!-- 代码块功能依赖 -->
+<script type="text/javascript" src="/blog/libs/codeBlock/codeBlockFuction.js"></script>
+
+
+  <!-- 是否加载使用自带的 prismjs. -->
+  <script type="text/javascript" src="/blog/libs/prism/prism.min.js"></script>
+
+
+<!-- 代码语言 -->
+
+<script type="text/javascript" src="/blog/libs/codeBlock/codeLang.js"></script>
+
+
+<!-- 代码块复制 -->
+
+<script type="text/javascript" src="/blog/libs/codeBlock/codeCopy.js"></script>
+
+
+<!-- 代码块收缩 -->
+
+<script type="text/javascript" src="/blog/libs/codeBlock/codeShrink.js"></script>
+
+
+
+    
+
+</main>
+
+
+
+
+    <footer class="page-footer bg-color">
+    
+        <link rel="stylesheet" href="/blog/libs/aplayer/APlayer.min.css">
+<style>
+    .aplayer .aplayer-lrc p {
+        
+        display: none;
+        
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 16px !important;
+    }
+
+    .aplayer .aplayer-lrc p.aplayer-lrc-current {
+        
+        display: none;
+        
+        font-size: 15px;
+        color: #42b983;
+    }
+
+    
+    .aplayer.aplayer-fixed.aplayer-narrow .aplayer-body {
+        left: -66px !important;
+    }
+
+    .aplayer.aplayer-fixed.aplayer-narrow .aplayer-body:hover {
+        left: 0px !important;
+    }
+
+    
+</style>
+<div class="">
+    
+    <div class="row">
+        <meting-js class="col l8 offset-l2 m10 offset-m1 s12"
+                   server="netease"
+                   type="playlist"
+                   id="503838841"
+                   fixed='true'
+                   autoplay='false'
+                   theme='#42b983'
+                   loop='all'
+                   order='random'
+                   preload='auto'
+                   volume='0.7'
+                   list-folded='true'
+        >
+        </meting-js>
+    </div>
+</div>
+
+<script src="/blog/libs/aplayer/APlayer.min.js"></script>
+<script src="/blog/libs/aplayer/Meting.min.js"></script>
+
+    
+
+    <div class="container row center-align"
+         style="margin-bottom: 0px !important;">
+        <div class="col s12 m8 l8 copy-right">
+            Copyright&nbsp;&copy;
+            
+                <span id="year">2023-2026</span>
+            
+            <a href="/blog/about" target="_blank">wxrkz123</a>
+            |&nbsp;Powered by&nbsp;<a href="https://hexo.io/" target="_blank">Hexo</a>
+            |&nbsp;Theme&nbsp;<a href="https://github.com/blinkfox/hexo-theme-matery" target="_blank">Matery</a>
+            
+            <br>
+            
+            
+            
+                
+            
+            
+                <span id="busuanzi_container_site_pv">
+                &nbsp;|&nbsp;<i class="far fa-eye"></i>&nbsp;总访问量:&nbsp;
+                    <span id="busuanzi_value_site_pv" class="white-color"></span>
+            </span>
+            
+            
+                <span id="busuanzi_container_site_uv">
+                &nbsp;|&nbsp;<i class="fas fa-users"></i>&nbsp;总访问人数:&nbsp;
+                    <span id="busuanzi_value_site_uv" class="white-color"></span>
+            </span>
+            
+            <br>
+
+            <!-- 运行天数提醒. -->
+            
+            <br>
+            
+        </div>
+        <div class="col s12 m4 l4 social-link social-statis">
+    <a href="https://github.com/wxrkz123" class="tooltipped" target="_blank" data-tooltip="访问我的GitHub" data-position="top" data-delay="50">
+        <i class="fab fa-github"></i>
+    </a>
+
+
+
+    <a href="mailto:2428534640@qq.com" class="tooltipped" target="_blank" data-tooltip="邮件联系我" data-position="top" data-delay="50">
+        <i class="fas fa-envelope-open"></i>
+    </a>
+
+
+
+
+
+
+
+    <a href="tencent://AddContact/?fromId=50&fromSubId=1&subcmd=all&uin=2428534640" class="tooltipped" target="_blank" data-tooltip="QQ联系我: 2428534640" data-position="top" data-delay="50">
+        <i class="fab fa-qq"></i>
+    </a>
+
+
+
+
+
+
+
+</div>
+    </div>
+</footer>
+
+<div class="progress-bar"></div>
+
+
+    <!-- 搜索遮罩框 -->
+<div id="searchModal" class="modal">
+    <div class="modal-content">
+        <div class="search-header">
+            <span class="title"><i class="fas fa-search"></i>&nbsp;&nbsp;搜索</span>
+            <input type="search" id="searchInput" name="s" placeholder="请输入搜索的关键字"
+                   class="search-input">
+        </div>
+        <div id="searchResult"></div>
+    </div>
+</div>
+
+<script type="text/javascript">
+$(function () {
+    var searchFunc = function (path, search_id, content_id) {
+        'use strict';
+        $.ajax({
+            url: path,
+            dataType: "xml",
+            success: function (xmlResponse) {
+                // get the contents from search data
+                var datas = $("entry", xmlResponse).map(function () {
+                    return {
+                        title: $("title", this).text(),
+                        content: $("content", this).text(),
+                        url: $("url", this).text()
+                    };
+                }).get();
+                var $input = document.getElementById(search_id);
+                var $resultContent = document.getElementById(content_id);
+                $input.addEventListener('input', function () {
+                    var str = '<ul class=\"search-result-list\">';
+                    var keywords = this.value.trim().toLowerCase().split(/[\s\-]+/);
+                    $resultContent.innerHTML = "";
+                    if (this.value.trim().length <= 0) {
+                        return;
+                    }
+                    // perform local searching
+                    datas.forEach(function (data) {
+                        var isMatch = true;
+                        var data_title = data.title.trim().toLowerCase();
+                        var data_content = data.content.trim().replace(/<[^>]+>/g, "").toLowerCase();
+                        var data_url = data.url;
+                        data_url = data_url.indexOf('/') === 0 ? data.url : '/' + data_url;
+                        var index_title = -1;
+                        var index_content = -1;
+                        var first_occur = -1;
+                        // only match artiles with not empty titles and contents
+                        if (data_title !== '' && data_content !== '') {
+                            keywords.forEach(function (keyword, i) {
+                                index_title = data_title.indexOf(keyword);
+                                index_content = data_content.indexOf(keyword);
+                                if (index_title < 0 && index_content < 0) {
+                                    isMatch = false;
+                                } else {
+                                    if (index_content < 0) {
+                                        index_content = 0;
+                                    }
+                                    if (i === 0) {
+                                        first_occur = index_content;
+                                    }
+                                }
+                            });
+                        }
+                        // show search results
+                        if (isMatch) {
+                            str += "<li><a href='" + data_url + "' class='search-result-title'>" + data_title + "</a>";
+                            var content = data.content.trim().replace(/<[^>]+>/g, "");
+                            if (first_occur >= 0) {
+                                // cut out 100 characters
+                                var start = first_occur - 20;
+                                var end = first_occur + 80;
+                                if (start < 0) {
+                                    start = 0;
+                                }
+                                if (start === 0) {
+                                    end = 100;
+                                }
+                                if (end > content.length) {
+                                    end = content.length;
+                                }
+                                var match_content = content.substr(start, end);
+                                // highlight all keywords
+                                keywords.forEach(function (keyword) {
+                                    var regS = new RegExp(keyword, "gi");
+                                    match_content = match_content.replace(regS, "<em class=\"search-keyword\">" + keyword + "</em>");
+                                });
+
+                                str += "<p class=\"search-result\">" + match_content + "...</p>"
+                            }
+                            str += "</li>";
+                        }
+                    });
+                    str += "</ul>";
+                    $resultContent.innerHTML = str;
+                });
+            }
+        });
+    };
+
+    searchFunc('/blog/search.xml', 'searchInput', 'searchResult');
+});
+</script>
+
+    <!-- 白天和黑夜主题 -->
+<div class="stars-con">
+    <div id="stars"></div>
+    <div id="stars2"></div>
+    <div id="stars3"></div>  
+</div>
+
+<script>
+    function switchNightMode() {
+        $('<div class="Cuteen_DarkSky"><div class="Cuteen_DarkPlanet"></div></div>').appendTo($('body')),
+        setTimeout(function () {
+            $('body').hasClass('DarkMode') 
+            ? ($('body').removeClass('DarkMode'), localStorage.setItem('isDark', '0'), $('#sum-moon-icon').removeClass("fa-sun").addClass('fa-moon')) 
+            : ($('body').addClass('DarkMode'), localStorage.setItem('isDark', '1'), $('#sum-moon-icon').addClass("fa-sun").removeClass('fa-moon')),
+            
+            setTimeout(function () {
+            $('.Cuteen_DarkSky').fadeOut(1e3, function () {
+                $(this).remove()
+            })
+            }, 2e3)
+        })
+    }
+</script>
+
+    <!-- 回到顶部按钮 -->
+<div id="backTop" class="top-scroll">
+    <a class="btn-floating btn-large waves-effect waves-light" href="#!">
+        <i class="fas fa-arrow-up"></i>
+    </a>
+</div>
+
+
+    <script src="/blog/libs/materialize/materialize.min.js"></script>
+    <script src="/blog/libs/masonry/masonry.pkgd.min.js"></script>
+    <script src="/blog/libs/aos/aos.js"></script>
+    <script src="/blog/libs/scrollprogress/scrollProgress.min.js"></script>
+    <script src="/blog/libs/lightGallery/js/lightgallery-all.min.js"></script>
+    <script src="/blog/js/matery.js"></script>
+
+    
+
+    
+    
+    
+
+    <!-- 雪花特效 -->
+     
+        <script type="text/javascript">
+            // 只在桌面版网页启用特效
+            var windowWidth = $(window).width();
+            if (windowWidth > 768) {
+                document.write('<script type="text/javascript" src="/blog/libs/others/snow.js"><\/script>');
+            }
+        </script>
+    
+
+    <!-- 鼠标星星特效 -->
+    
+
+     
+        <script src="https://ssl.captcha.qq.com/TCaptcha.js"></script>
+        <script src="/blog/libs/others/TencentCaptcha.js"></script>
+        <button id="TencentCaptcha" data-appid="xxxxxxxxxx" data-cbfn="callback" type="button" hidden></button>
+    
+
+    <!-- Baidu Analytics -->
+
+    <!-- Baidu Push -->
+
+<script>
+    (function () {
+        var bp = document.createElement('script');
+        var curProtocol = window.location.protocol.split(':')[0];
+        if (curProtocol === 'https') {
+            bp.src = 'https://zz.bdstatic.com/linksubmit/push.js';
+        } else {
+            bp.src = 'http://push.zhanzhang.baidu.com/push.js';
+        }
+        var s = document.getElementsByTagName("script")[0];
+        s.parentNode.insertBefore(bp, s);
+    })();
+</script>
+
+    
+    <script src="/blog/libs/others/clicklove.js" async="async"></script>
+    
+    
+    <script async src="/blog/libs/others/busuanzi.pure.mini.js"></script>
+    
+
+    
+
+    
+
+    <!--腾讯兔小巢-->
+    
+    
+
+    
+
+    
+    <script type="text/javascript" src="/blog/libs/background/ribbon-dynamic.js" async="async"></script>
+    
+
+    
+    <script src="/blog/libs/instantpage/instantpage.js" type="module"></script>
+    
+
+</body>
+
+</html>
