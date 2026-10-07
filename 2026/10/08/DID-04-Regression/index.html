@@ -317,20 +317,8 @@
                                 <span class="chip bg-color">DID</span>
                             </a>
                         
-                            <a href="/blog/tags/%E8%AE%A1%E9%87%8F%E7%BB%8F%E6%B5%8E%E5%AD%A6/">
-                                <span class="chip bg-color">计量经济学</span>
-                            </a>
-                        
-                            <a href="/blog/tags/%E5%9B%A0%E6%9E%9C%E6%8E%A8%E6%96%AD/">
-                                <span class="chip bg-color">因果推断</span>
-                            </a>
-                        
-                            <a href="/blog/tags/Python/">
-                                <span class="chip bg-color">Python</span>
-                            </a>
-                        
-                            <a href="/blog/tags/Stata/">
-                                <span class="chip bg-color">Stata</span>
+                            <a href="/blog/tags/DID%E5%9F%BA%E7%A1%80/">
+                                <span class="chip bg-color">DID基础</span>
                             </a>
                         
                     </div>
@@ -379,7 +367,8 @@
         <div class="card-content article-card-content">
             <div id="articleContent">
                 <p>前三篇都在讲概念，这一篇开始动手。我们会用同一份数据，依次用 <strong>四格表手算、交互项回归、一阶差分、固定效应回归</strong> 四种方法估计 DID，验证它们给出完全相同的点估计；然后讨论实践中最常被问到的两个问题：<strong>控制变量要不要加、怎么加？标准误为什么要聚类？</strong></p>
-<h2 id="数据：一个省份试点政策"><a href="#数据：一个省份试点政策" class="headerlink" title="数据：一个省份试点政策"></a>数据：一个省份试点政策</h2><p>为了能和“真实答案”对照，我们使用模拟数据。设定如下：</p>
+<p>本文是「DID 从入门到精通」系列第 04 篇，完整路线见 <a href="/blog/2026/10/08/DID-00-Roadmap/" title="DID 从入门到精通（00）：系列导读与学习路线">系列导读</a>。</p>
+<h2 id="一、数据：一个省份试点政策"><a href="#一、数据：一个省份试点政策" class="headerlink" title="一、数据：一个省份试点政策"></a>一、数据：一个省份试点政策</h2><p>为了能和“真实答案”对照，我们使用模拟数据。设定如下：</p>
 <ul>
 <li>30 个省份，每个省 40 家企业，共 1200 家企业；</li>
 <li>随机抽取 10 个省作为某项创新政策的试点省（处理组）；</li>
@@ -428,7 +417,7 @@ df<span class="token punctuation">.</span>to_csv<span class="token punctuation">
 4     4     0      0     0  6.449779  13.582206<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
 
 <p>数据是标准的 <strong>长格式（long format）</strong> 面板：每行是一个“企业-时期”，共 2400 行。</p>
-<h2 id="方法一：四格表"><a href="#方法一：四格表" class="headerlink" title="方法一：四格表"></a>方法一：四格表</h2><pre class="line-numbers language-python" data-language="python"><code class="language-python">tab <span class="token operator">=</span> df<span class="token punctuation">.</span>groupby<span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token string">"treat"</span><span class="token punctuation">,</span> <span class="token string">"post"</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">.</span>y<span class="token punctuation">.</span>mean<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>unstack<span class="token punctuation">(</span><span class="token punctuation">)</span>
+<h2 id="二、方法一：四格表"><a href="#二、方法一：四格表" class="headerlink" title="二、方法一：四格表"></a>二、方法一：四格表</h2><pre class="line-numbers language-python" data-language="python"><code class="language-python">tab <span class="token operator">=</span> df<span class="token punctuation">.</span>groupby<span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token string">"treat"</span><span class="token punctuation">,</span> <span class="token string">"post"</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">.</span>y<span class="token punctuation">.</span>mean<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>unstack<span class="token punctuation">(</span><span class="token punctuation">)</span>
 <span class="token keyword">print</span><span class="token punctuation">(</span>tab<span class="token punctuation">.</span><span class="token builtin">round</span><span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
 did <span class="token operator">=</span> <span class="token punctuation">(</span>tab<span class="token punctuation">.</span>loc<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">-</span> tab<span class="token punctuation">.</span>loc<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span> <span class="token operator">-</span> <span class="token punctuation">(</span>tab<span class="token punctuation">.</span>loc<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">-</span> tab<span class="token punctuation">.</span>loc<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
 <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">"手算 DID:"</span><span class="token punctuation">,</span> <span class="token builtin">round</span><span class="token punctuation">(</span>did<span class="token punctuation">,</span> <span class="token number">3</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
@@ -443,8 +432,8 @@ treat
 前后对比(只看处理组): 4.842
 截面对比(只看政策后): 5.334<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
 
-<p>和第 02 篇的结论一样：前后对比（4.84）混入了共同时间趋势，截面对比（5.33）混入了组间水平差异，都严重高估了真实效应 2。DID 给出 1.73，离真实值近得多，剩下的差距是抽样误差。</p>
-<h2 id="方法二：交互项回归"><a href="#方法二：交互项回归" class="headerlink" title="方法二：交互项回归"></a>方法二：交互项回归</h2><p>$$<br>y_{it} &#x3D; \beta_0 + \beta_1 , \text{treat}_i + \beta_2 , \text{post}_t + \beta_3 , \text{treat}_i \times \text{post}<em>t + \varepsilon</em>{it}<br>$$</p>
+<p>和<a href="/blog/2026/10/08/DID-02-Intuition-Card-Krueger/" title="DID 从入门到精通（02）：DID 的直觉——四格表与最低工资研究">第 02 篇</a>的结论一样：前后对比（4.84）混入了共同时间趋势，截面对比（5.33）混入了组间水平差异，都严重高估了真实效应 2。DID 给出 1.73，离真实值近得多，剩下的差距是抽样误差。</p>
+<h2 id="三、方法二：交互项回归"><a href="#三、方法二：交互项回归" class="headerlink" title="三、方法二：交互项回归"></a>三、方法二：交互项回归</h2><p>$$y_{it} &#x3D; \beta_0 + \beta_1 \, \text{treat}_i + \beta_2 \, \text{post}_t + \beta_3 \, \text{treat}_i \times \text{post}_t + \varepsilon_{it}$$</p>
 <p>在 statsmodels 的公式语法里，<code>treat * post</code> 会自动展开为 <code>treat + post + treat:post</code>：</p>
 <pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token keyword">import</span> statsmodels<span class="token punctuation">.</span>formula<span class="token punctuation">.</span>api <span class="token keyword">as</span> smf
 
@@ -454,8 +443,8 @@ m1 <span class="token operator">=</span> smf<span class="token punctuation">.</s
 <pre class="line-numbers language-text" data-language="text"><code class="language-text">coef=1.728, se=0.361<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
 
 <p>交互项系数 1.728，与四格表 <strong>完全相同</strong>。但这里的标准误 0.361 是有问题的，后面专门讨论。</p>
-<h2 id="方法三：一阶差分"><a href="#方法三：一阶差分" class="headerlink" title="方法三：一阶差分"></a>方法三：一阶差分</h2><p>在两期面板中，还可以先对每个企业做前后差分 $\Delta y_i &#x3D; y_{i2} - y_{i1}$，然后把 $\Delta y_i$ 对 $\text{treat}_i$ 回归：</p>
-<p>$$<br>\Delta y_i &#x3D; \gamma_0 + \gamma_1 , \text{treat}_i + \Delta \varepsilon_i<br>$$</p>
+<h2 id="四、方法三：一阶差分"><a href="#四、方法三：一阶差分" class="headerlink" title="四、方法三：一阶差分"></a>四、方法三：一阶差分</h2><p>在两期面板中，还可以先对每个企业做前后差分 $\Delta y_i &#x3D; y_{i2} - y_{i1}$，然后把 $\Delta y_i$ 对 $\text{treat}_i$ 回归：</p>
+<p>$$\Delta y_i &#x3D; \gamma_0 + \gamma_1 \, \text{treat}_i + \Delta \varepsilon_i$$</p>
 <p>差分消掉了企业固定效应，$\gamma_1$ 就是“处理组的平均变化 − 对照组的平均变化”，正是 DID。</p>
 <pre class="line-numbers language-python" data-language="python"><code class="language-python">wide <span class="token operator">=</span> df<span class="token punctuation">.</span>pivot<span class="token punctuation">(</span>index<span class="token operator">=</span><span class="token string">"firm"</span><span class="token punctuation">,</span> columns<span class="token operator">=</span><span class="token string">"post"</span><span class="token punctuation">,</span> values<span class="token operator">=</span><span class="token string">"y"</span><span class="token punctuation">)</span>
 wide<span class="token punctuation">.</span>columns <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token string">"y0"</span><span class="token punctuation">,</span> <span class="token string">"y1"</span><span class="token punctuation">]</span>
@@ -467,7 +456,7 @@ fd <span class="token operator">=</span> smf<span class="token punctuation">.</s
 
 <pre class="line-numbers language-text" data-language="text"><code class="language-text">一阶差分: coef=1.728, se=0.686<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
 
-<h2 id="方法四：双向固定效应回归"><a href="#方法四：双向固定效应回归" class="headerlink" title="方法四：双向固定效应回归"></a>方法四：双向固定效应回归</h2><p>$$<br>y_{it} &#x3D; \alpha_i + \lambda_t + \tau , D_{it} + \varepsilon_{it}, \qquad D_{it} &#x3D; \text{treat}_i \times \text{post}_t<br>$$</p>
+<h2 id="五、方法四：双向固定效应回归"><a href="#五、方法四：双向固定效应回归" class="headerlink" title="五、方法四：双向固定效应回归"></a>五、方法四：双向固定效应回归</h2><p>$$y_{it} &#x3D; \alpha_i + \lambda_t + \tau \, D_{it} + \varepsilon_{it}, \qquad D_{it} &#x3D; \text{treat}_i \times \text{post}_t$$</p>
 <p>用 <code>pyfixest</code>（Python 版的 <code>fixest</code>，语法和 Stata 的 <code>reghdfe</code> 很像），竖线 <code>|</code> 后面写需要吸收的固定效应：</p>
 <pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token keyword">import</span> pyfixest <span class="token keyword">as</span> pf
 
@@ -486,7 +475,7 @@ Observations:  2400
 RMSE: 1.537 R2: 0.907 R2 Within: 0.066<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
 
 <p>四种方法给出 <strong>完全相同的点估计 1.728</strong>。这不是巧合：在两期平衡面板中，它们在代数上是等价的。</p>
-<h2 id="控制变量：加还是不加？"><a href="#控制变量：加还是不加？" class="headerlink" title="控制变量：加还是不加？"></a>控制变量：加还是不加？</h2><p>很多初学者的第一反应是“控制变量越多越好”。在 DID 里，这个直觉经常是错的。</p>
+<h2 id="六、控制变量：加还是不加？"><a href="#六、控制变量：加还是不加？" class="headerlink" title="六、控制变量：加还是不加？"></a>六、控制变量：加还是不加？</h2><p>很多初学者的第一反应是“控制变量越多越好”。在 DID 里，这个直觉经常是错的。</p>
 <h3 id="不随时间变化的控制变量：没有作用"><a href="#不随时间变化的控制变量：没有作用" class="headerlink" title="不随时间变化的控制变量：没有作用"></a>不随时间变化的控制变量：没有作用</h3><p>我们的数据里有一个企业规模变量 <code>size</code>，它在两期之间不变。把它加进交互项回归：</p>
 <pre class="line-numbers language-python" data-language="python"><code class="language-python">m2 <span class="token operator">=</span> smf<span class="token punctuation">.</span>ols<span class="token punctuation">(</span><span class="token string">"y ~ treat * post"</span><span class="token punctuation">,</span> data<span class="token operator">=</span>df<span class="token punctuation">)</span><span class="token punctuation">.</span>fit<span class="token punctuation">(</span>cov_type<span class="token operator">=</span><span class="token string">"cluster"</span><span class="token punctuation">,</span> cov_kwds<span class="token operator">=</span><span class="token punctuation">&#123;</span><span class="token string">"groups"</span><span class="token punctuation">:</span> df<span class="token punctuation">[</span><span class="token string">"prov"</span><span class="token punctuation">]</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
 m3 <span class="token operator">=</span> smf<span class="token punctuation">.</span>ols<span class="token punctuation">(</span><span class="token string">"y ~ treat * post + size"</span><span class="token punctuation">,</span> data<span class="token operator">=</span>df<span class="token punctuation">)</span><span class="token punctuation">.</span>fit<span class="token punctuation">(</span>cov_type<span class="token operator">=</span><span class="token string">"cluster"</span><span class="token punctuation">,</span> cov_kwds<span class="token operator">=</span><span class="token punctuation">&#123;</span><span class="token string">"groups"</span><span class="token punctuation">:</span> df<span class="token punctuation">[</span><span class="token string">"prov"</span><span class="token punctuation">]</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
@@ -509,7 +498,7 @@ size           0.765
 size:post      0.001
 dtype: float64<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
 
-<p><code>size:post</code> 接近 0，说明在我们的数据里大小企业的增长趋势没有差异（模拟时确实没有设定），所以 DID 估计值不变。在真实数据里，这一项可能很重要。这种“条件平行趋势”的思想会在第 07 篇（PSM-DID）和第 11 篇（双重稳健 DID）中进一步展开。</p>
+<p><code>size:post</code> 接近 0，说明在我们的数据里大小企业的增长趋势没有差异（模拟时确实没有设定），所以 DID 估计值不变。在真实数据里，这一项可能很重要。这种“条件平行趋势”的思想会在<a href="/blog/2026/10/08/DID-07-Robustness/" title="DID 从入门到精通（07）：稳健性检验工具箱——安慰剂、PSM-DID 与三重差分">第 07 篇</a>（PSM-DID）和<a href="/blog/2026/10/08/DID-11-Frontiers-and-Practice/" title="DID 从入门到精通（11）：前沿与实战——预检验的局限、HonestDiD、双重稳健 DID 与完整研究清单">第 11 篇</a>（双重稳健 DID）中进一步展开。</p>
 <h3 id="坏控制变量：千万别加"><a href="#坏控制变量：千万别加" class="headerlink" title="坏控制变量：千万别加"></a>坏控制变量：千万别加</h3><p><strong>被政策影响的变量不能作为控制变量</strong>。比如研究试点政策对企业研发投入的影响，如果控制了“政策后的企业利润”，而利润本身也受政策影响，就会产生偏误——你把政策效应的一部分“控制掉”了。这类变量叫作 <strong>坏控制（bad control）</strong>。</p>
 <p>经验法则：</p>
 <ul>
@@ -517,7 +506,7 @@ dtype: float64<span aria-hidden="true" class="line-numbers-rows"><span></span><s
 <li>如果必须使用随时间变化的控制变量，要论证它不受政策影响；</li>
 <li>加入控制变量前后系数变化很大，往往说明存在问题，而不是“结果更准确了”。</li>
 </ul>
-<h2 id="标准误：为什么必须聚类"><a href="#标准误：为什么必须聚类" class="headerlink" title="标准误：为什么必须聚类"></a>标准误：为什么必须聚类</h2><p>回到刚才那个问题。同样的点估计 1.728，普通 OLS 给出的标准误是 0.361，聚类到省份后变成 0.686，<strong>几乎翻了一倍</strong>：</p>
+<h2 id="七、标准误：为什么必须聚类"><a href="#七、标准误：为什么必须聚类" class="headerlink" title="七、标准误：为什么必须聚类"></a>七、标准误：为什么必须聚类</h2><p>回到刚才那个问题。同样的点估计 1.728，普通 OLS 给出的标准误是 0.361，聚类到省份后变成 0.686，<strong>几乎翻了一倍</strong>：</p>
 <table>
 <thead>
 <tr>
@@ -543,7 +532,7 @@ dtype: float64<span aria-hidden="true" class="line-numbers-rows"><span></span><s
 <p>哪个是对的？</p>
 <p>普通 OLS 标准误假设每个观测值的误差项 <strong>相互独立</strong>。但在我们的数据里，每个省每年有一个共同冲击 <code>shock</code>，同一个省的 40 家企业同时受到这个冲击，它们的误差项高度相关。这意味着：<strong>40 家企业提供的有效信息远少于 40 个独立观测</strong>。</p>
 <p>更关键的是：<strong>政策是在省份层面分配的</strong>。真正有多少“独立的实验单位”？只有 30 个省，其中 10 个处理省。把 1200 家企业当作 1200 个独立样本，会严重低估不确定性。</p>
-<p>这就是 Bertrand、Duflo 和 Mullainathan（2004）那篇著名论文的核心发现：他们在美国州级数据中随机生成“假政策”，用普通标准误做 DID，<strong>结果高达 45% 的假政策显示出 5% 水平的显著效应</strong>——而正确的比例应该是 5%。第 08 篇会用模拟重现这个结果。</p>
+<p>这就是 Bertrand、Duflo 和 Mullainathan（2004）那篇著名论文的核心发现：他们在美国州级数据中随机生成“假政策”，用普通标准误做 DID，<strong>结果高达 45% 的假政策显示出 5% 水平的显著效应</strong>——而正确的比例应该是 5%。<a href="/blog/2026/10/08/DID-08-Inference/" title="DID 从入门到精通（08）：统计推断——聚类标准误、少聚类问题与 Wild Bootstrap">第 08 篇</a>会用模拟重现这个结果。</p>
 <h3 id="聚类到哪一层？"><a href="#聚类到哪一层？" class="headerlink" title="聚类到哪一层？"></a>聚类到哪一层？</h3><p>一个实用的原则（Abadie 等，2023）：</p>
 <blockquote>
 <p><strong>聚类层级应该与处理分配的层级一致。</strong></p>
@@ -553,7 +542,7 @@ dtype: float64<span aria-hidden="true" class="line-numbers-rows"><span></span><s
 <li>政策在城市层面分配 → 聚类到城市；</li>
 <li>政策在企业层面分配（比如某些企业被选入试点名单）→ 聚类到企业。</li>
 </ul>
-<p>如果处理分配层级上的聚类数太少（比如只有 6 个省、其中 2 个处理省），聚类标准误本身也不可靠，需要用 wild cluster bootstrap 或随机化推断，这些放到第 08 篇讲。</p>
+<p>如果处理分配层级上的聚类数太少（比如只有 6 个省、其中 2 个处理省），聚类标准误本身也不可靠，需要用 wild cluster bootstrap 或随机化推断，这些放到<a href="/blog/2026/10/08/DID-08-Inference/" title="DID 从入门到精通（08）：统计推断——聚类标准误、少聚类问题与 Wild Bootstrap">第 08 篇</a>讲。</p>
 <h3 id="小细节：z-分布还是-t-分布"><a href="#小细节：z-分布还是-t-分布" class="headerlink" title="小细节：z 分布还是 t 分布"></a>小细节：z 分布还是 t 分布</h3><p>你可能注意到，statsmodels 和 pyfixest 给出的标准误都是 0.686，但 p 值不同：statsmodels 是 0.0118，pyfixest 是 0.018。这是因为：</p>
 <ul>
 <li>statsmodels 的 <code>cov_type=&quot;cluster&quot;</code> 默认用 <strong>正态分布</strong> 计算 p 值；</li>
@@ -587,14 +576,14 @@ dtype: float64<span aria-hidden="true" class="line-numbers-rows"><span></span><s
 <span class="token command keyword">reghdfe</span> y treat_post c.size<span class="token operator">#</span>i.post<span class="token punctuation">,</span> <span class="token function">absorb</span><span class="token punctuation">(</span>firm post<span class="token punctuation">)</span> <span class="token function">vce</span><span class="token punctuation">(</span>cluster prov<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
 
 <p>注意 Stata 的 <code>reg</code> 和 <code>reghdfe</code> 在聚类时默认使用 $t(G-1)$ 分布，结果与 pyfixest 一致。</p>
-<h2 id="估计结果怎么解读"><a href="#估计结果怎么解读" class="headerlink" title="估计结果怎么解读"></a>估计结果怎么解读</h2><p>最终我们报告：</p>
+<h2 id="八、估计结果怎么解读"><a href="#八、估计结果怎么解读" class="headerlink" title="八、估计结果怎么解读"></a>八、估计结果怎么解读</h2><p>最终我们报告：</p>
 <blockquote>
 <p>试点政策使企业研发投入平均增加 1.73 百万元（省份聚类标准误 0.69，95% 置信区间 [0.33, 3.13]），在 5% 水平上显著。</p>
 </blockquote>
 <p>真实效应 2 落在置信区间内。注意解读时的几个要点：</p>
 <ul>
 <li>这是 <strong>ATT</strong>：试点省企业的平均效应，不一定能外推到非试点省；</li>
-<li>它依赖于 <strong>平行趋势</strong>：两期数据无法检验，需要更多政策前时期（下一篇）；</li>
+<li>它依赖于 <strong>平行趋势</strong>：两期数据无法检验，需要更多政策前时期（<a href="/blog/2026/10/08/DID-05-TWFE/" title="DID 从入门到精通（05）：多期 DID 与双向固定效应模型">下一篇</a>）；</li>
 <li>置信区间较宽：只有 10 个处理省，信息有限。</li>
 </ul>
 <h2 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h2><ul>
@@ -603,7 +592,14 @@ dtype: float64<span aria-hidden="true" class="line-numbers-rows"><span></span><s
 <li>标准误必须考虑组内相关，<strong>聚类层级与处理分配层级一致</strong>。</li>
 <li>聚类数不多时用 $t(G-1)$ 分布计算 p 值。</li>
 </ul>
-<p>下一篇把两期推广到多期，正式进入双向固定效应模型。</p>
+<h2 id="练习"><a href="#练习" class="headerlink" title="练习"></a>练习</h2><ol>
+<li>把模拟中省份冲击 <code>shock</code> 的标准差从 1 改为 0，重新比较普通标准误与省份聚类标准误，解释两者的差距为什么缩小。</li>
+<li>在数据中构造一个受政策影响的“坏控制”（例如 <code>profit = 0.5 * y + 噪声</code>），把它加入回归，观察 DID 系数如何变化并解释原因。</li>
+<li>只保留 3 个处理省（其余处理省删除）重新估计，比较聚类标准误的变化，并思考此时聚类标准误是否还可靠（<a href="/blog/2026/10/08/DID-08-Inference/" title="DID 从入门到精通（08）：统计推断——聚类标准误、少聚类问题与 Wild Bootstrap">第 08 篇</a>会给出答案）。</li>
+<li>用 statsmodels 的 <code>use_t=True</code> 重新计算 p 值，确认它与 pyfixest 的结果一致。</li>
+</ol>
+<a href="/blog/2026/10/08/DID-05-TWFE/" title="DID 从入门到精通（05）：多期 DID 与双向固定效应模型">下一篇</a>把两期推广到多期，正式进入双向固定效应模型。
+
 <h2 id="参考文献"><a href="#参考文献" class="headerlink" title="参考文献"></a>参考文献</h2><ul>
 <li>Bertrand, M., Duflo, E., &amp; Mullainathan, S. (2004). How Much Should We Trust Differences-in-Differences Estimates? <em>Quarterly Journal of Economics</em>, 119(1), 249–275.</li>
 <li>Abadie, A., Athey, S., Imbens, G. W., &amp; Wooldridge, J. M. (2023). When Should You Adjust Standard Errors for Clustering? <em>Quarterly Journal of Economics</em>, 138(1), 1–35.</li>
@@ -627,20 +623,8 @@ dtype: float64<span aria-hidden="true" class="line-numbers-rows"><span></span><s
                                     <span class="chip bg-color">DID</span>
                                 </a>
                             
-                                <a href="/blog/tags/%E8%AE%A1%E9%87%8F%E7%BB%8F%E6%B5%8E%E5%AD%A6/">
-                                    <span class="chip bg-color">计量经济学</span>
-                                </a>
-                            
-                                <a href="/blog/tags/%E5%9B%A0%E6%9E%9C%E6%8E%A8%E6%96%AD/">
-                                    <span class="chip bg-color">因果推断</span>
-                                </a>
-                            
-                                <a href="/blog/tags/Python/">
-                                    <span class="chip bg-color">Python</span>
-                                </a>
-                            
-                                <a href="/blog/tags/Stata/">
-                                    <span class="chip bg-color">Stata</span>
+                                <a href="/blog/tags/DID%E5%9F%BA%E7%A1%80/">
+                                    <span class="chip bg-color">DID基础</span>
                                 </a>
                             
                         </div>
@@ -690,19 +674,19 @@ dtype: float64<span aria-hidden="true" class="line-numbers-rows"><span></span><s
             <div class="article-badge left-badge text-color">
                 <i class="fas fa-chevron-left"></i>&nbsp;上一篇</div>
             <div class="card">
-                <a href="/blog/2026/10/08/DID-05-TWFE/">
+                <a href="/blog/2026/10/08/DID-03-Identification/">
                     <div class="card-image">
                         
                         
-                        <img src="/blog/medias/featureimages/23.jpg" class="responsive-img" alt="DID 从入门到精通（05）：多期 DID 与双向固定效应模型">
+                        <img src="/blog/medias/featureimages/7.jpg" class="responsive-img" alt="DID 从入门到精通（03）：2×2 DID 的识别——平行趋势与三个关键假设">
                         
-                        <span class="card-title">DID 从入门到精通（05）：多期 DID 与双向固定效应模型</span>
+                        <span class="card-title">DID 从入门到精通（03）：2×2 DID 的识别——平行趋势与三个关键假设</span>
                     </div>
                 </a>
                 <div class="card-content article-content">
                     <div class="summary block-with-text">
                         
-                            把 2×2 DID 推广到多期面板数据，介绍双向固定效应（TWFE）模型，推导组内变换与 LSDV 的等价性，比较 statsmodels、linearmodels、pyfixest 与 Stata reghdfe 的写法，并讨论高维固定效应与组别线性趋势的使用陷阱。
+                            用潜在结果框架严格推导 2×2 DID 识别的是 ATT，逐条解释平行趋势、无预期效应、SUTVA 三个假设的含义与常见违背情形，并证明 DID 与带交互项的回归完全等价。
                         
                     </div>
                     <div class="publish-info">
@@ -728,20 +712,8 @@ dtype: float64<span aria-hidden="true" class="line-numbers-rows"><span></span><s
                         <span class="chip bg-color">DID</span>
                     </a>
                     
-                    <a href="/blog/tags/%E8%AE%A1%E9%87%8F%E7%BB%8F%E6%B5%8E%E5%AD%A6/">
-                        <span class="chip bg-color">计量经济学</span>
-                    </a>
-                    
-                    <a href="/blog/tags/%E5%9B%A0%E6%9E%9C%E6%8E%A8%E6%96%AD/">
-                        <span class="chip bg-color">因果推断</span>
-                    </a>
-                    
-                    <a href="/blog/tags/Python/">
-                        <span class="chip bg-color">Python</span>
-                    </a>
-                    
-                    <a href="/blog/tags/Stata/">
-                        <span class="chip bg-color">Stata</span>
+                    <a href="/blog/tags/DID%E5%9F%BA%E7%A1%80/">
+                        <span class="chip bg-color">DID基础</span>
                     </a>
                     
                 </div>
@@ -755,19 +727,19 @@ dtype: float64<span aria-hidden="true" class="line-numbers-rows"><span></span><s
                 下一篇&nbsp;<i class="fas fa-chevron-right"></i>
             </div>
             <div class="card">
-                <a href="/blog/2026/10/08/DID-03-Identification/">
+                <a href="/blog/2026/10/08/DID-05-TWFE/">
                     <div class="card-image">
                         
                         
-                        <img src="/blog/medias/featureimages/7.jpg" class="responsive-img" alt="DID 从入门到精通（03）：2×2 DID 的识别——平行趋势与三个关键假设">
+                        <img src="/blog/medias/featureimages/23.jpg" class="responsive-img" alt="DID 从入门到精通（05）：多期 DID 与双向固定效应模型">
                         
-                        <span class="card-title">DID 从入门到精通（03）：2×2 DID 的识别——平行趋势与三个关键假设</span>
+                        <span class="card-title">DID 从入门到精通（05）：多期 DID 与双向固定效应模型</span>
                     </div>
                 </a>
                 <div class="card-content article-content">
                     <div class="summary block-with-text">
                         
-                            用潜在结果框架严格推导 2×2 DID 识别的是 ATT，逐条解释平行趋势、无预期效应、SUTVA 三个假设的含义与常见违背情形，并证明 DID 与带交互项的回归完全等价。
+                            把 2×2 DID 推广到多期面板数据，介绍双向固定效应（TWFE）模型，推导组内变换与 LSDV 的等价性，比较 statsmodels、linearmodels、pyfixest 与 Stata reghdfe 的写法，并讨论高维固定效应与组别线性趋势的使用陷阱。
                         
                     </div>
                     <div class="publish-info">
@@ -793,12 +765,8 @@ dtype: float64<span aria-hidden="true" class="line-numbers-rows"><span></span><s
                         <span class="chip bg-color">DID</span>
                     </a>
                     
-                    <a href="/blog/tags/%E8%AE%A1%E9%87%8F%E7%BB%8F%E6%B5%8E%E5%AD%A6/">
-                        <span class="chip bg-color">计量经济学</span>
-                    </a>
-                    
-                    <a href="/blog/tags/%E5%9B%A0%E6%9E%9C%E6%8E%A8%E6%96%AD/">
-                        <span class="chip bg-color">因果推断</span>
+                    <a href="/blog/tags/DID%E8%BF%9B%E9%98%B6/">
+                        <span class="chip bg-color">DID进阶</span>
                     </a>
                     
                 </div>
