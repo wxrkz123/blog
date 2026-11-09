@@ -10,7 +10,7 @@
 
 | 分类 | 内容 |
 |---|---|
-| **Python** | [「Python 从入门到精通」系列（23 篇）](https://wxrkz123.github.io/blog/2026/10/07/Python-00-Roadmap/)：从环境搭建、对象模型讲到描述符、元类、asyncio、垃圾回收、字节码解释器与性能优化 |
+| **Python** | [「Python 零基础入门」系列（15 篇）](https://wxrkz123.github.io/blog/2026/11/09/Python-Basics-00-Guide/)：写给完全没学过编程的人，每篇只讲一件事，最后做一个记账本小项目<br>[「Python 从入门到精通」系列（23 篇）](https://wxrkz123.github.io/blog/2026/10/07/Python-00-Roadmap/)：从环境搭建、对象模型讲到描述符、元类、asyncio、垃圾回收、字节码解释器与性能优化 |
 | **Econometrics** | [「DID 从入门到精通」系列（12 篇）](https://wxrkz123.github.io/blog/2026/10/08/DID-00-Roadmap/)：从因果推断基础、平行趋势、TWFE、事件研究法讲到交错 DID 的陷阱与异质性稳健估计量 |
 | **Program** | 数据结构与算法、C 语言实现数据结构、Java 基础、NumPy |
 | **Finance** | 量化投资、趋势交易、跨期套利、马尔科夫模型、金融数据分析实验 |
