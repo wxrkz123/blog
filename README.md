@@ -7,11 +7,15 @@
 
 每次推送到 `source` 分支，GitHub Actions 会自动执行 `hexo generate`，并把生成的网页发布到 `main` 分支，一两分钟后网站就会更新。运行记录在仓库的 **Actions** 页面。
 
+📖 **详细的写作、预览、发布方法和常见问题，见 [使用说明.md](使用说明.md)。**
+
 ## 目录结构
 
 ```text
 ├── _config.yml              站点配置（网址、分页、永久链接等）
 ├── package.json             依赖（Hexo 6.3.0 及插件）
+├── 使用说明.md               详细使用说明
+├── scaffolds/post.md        新建文章的模板
 ├── scripts/                 构建时用到的小脚本（见下文）
 ├── source/
 │   ├── _posts/              所有文章（.md）
