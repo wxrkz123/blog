@@ -1,0 +1,42 @@
+# 推送到 source 分支后，自动用 Hexo 构建博客，并把生成的网页发布到 main 分支
+# （GitHub Pages 从 main 分支发布，所以网站会在一两分钟后自动更新）。
+name: Deploy blog
+
+on:
+  push:
+    branches: [source]
+  workflow_dispatch:        # 也可以在 Actions 页面手动点击运行
+
+permissions:
+  contents: write           # 需要写权限才能推送到 main 分支
+
+concurrency:
+  group: deploy-blog
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build site
+        run: npx hexo clean && npx hexo generate
+
+      - name: Publish to main
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: main
+          publish_dir: ./public
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          full_commit_message: "Site updated from ${{ github.sha }}"
