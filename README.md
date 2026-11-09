@@ -60,11 +60,15 @@ git add . && git commit -m "新文章：xxx" && git push    # 推送后自动发
 
 **不再需要 `hexo deploy`。** 只要 `git push` 到 `source` 分支，网站就会自动更新。
 
-## 关于部分文章的格式
+## 关于图片
 
-旧文章（2023–2024 年）和 DID 系列的原始 Markdown 不在这个仓库里，它们是从线上网页还原的。这些文件的开头带有 `rawhtml: true`，正文是渲染好的 HTML，由 `scripts/rawhtml.js` 原样输出，所以显示效果和原来完全一样。
+文章的配图放在与文章同名的文件夹里（例如 `source/_posts/趋势交易/`），在文章中直接写文件名即可：
 
-如果你电脑上还有它们的原始 `.md` 文件（例如 `E:\blog\source\_posts\DID-*.md`），可以直接用原始文件替换同名文件，替换后就能像普通 Markdown 一样编辑了。注意：DID 系列的公式看起来是用服务端渲染数学公式的插件（如 hexo-filter-mathjax）生成的，换回原始 Markdown 时，需要把那个插件也加到 `package.json` 里。
+```markdown
+![收盘价与 MACD](Close_Price_and_MACD_Analysis.png)
+```
+
+也可以写成 `![说明](文章名/图片.png)`（Typora 的习惯写法），`hexo-asset-img` 插件会自动转换。DID 系列的配图放在 `source/images/did/`，引用方式是 `![说明](/images/did/图片.png)`。
 
 `scripts/seed-order.js` 只用来保持标签云、分类云中标签的显示顺序和原来一致，不影响内容。
 
