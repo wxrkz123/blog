@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2dae44">
+<title>离线阅读 | Wxrkz</title>
+<link rel="icon" href="/blog/favicon.png">
+<link rel="manifest" href="/blog/manifest.webmanifest">
+<style>
+:root { --bg:#f5f7f5; --card:#fff; --text:#2c3e50; --muted:#7a8a99; --line:#e6ece8; --green:#2dae44; }
+@media (prefers-color-scheme: dark) { :root { --bg:#16191c; --card:#202428; --text:#dfe3e7; --muted:#97a2ad; --line:#2e3439; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
+header { background:linear-gradient(to right,#4cbf30,#0f9d58); color:#fff; padding:28px 16px 24px; text-align:center; }
+header img { width:56px; height:56px; }
+header h1 { margin:8px 0 4px; font-size:22px; }
+header p { margin:0; opacity:.9; font-size:14px; }
+main { max-width:720px; margin:0 auto; padding:16px; }
+.status { background:var(--card); border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:14px; color:var(--muted); display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+.status b { color:var(--text); }
+button, .btn { border:0; border-radius:18px; padding:6px 16px; background:var(--green); color:#fff; font-size:14px; cursor:pointer; text-decoration:none; }
+ul { list-style:none; margin:0; padding:0; }
+li.item { display:flex; align-items:stretch; gap:8px; margin-bottom:10px; }
+li a { display:block; flex:1; min-width:0; background:var(--card); border-radius:10px; padding:12px 16px; color:var(--text); text-decoration:none; border:1px solid var(--line); }
+li a:active { transform:scale(.99); }
+.del { flex:none; background:var(--card); color:var(--muted); border:1px solid var(--line); border-radius:10px; padding:0 14px; font-size:13px; }
+.del:hover, .del:focus-visible { color:#d93025; border-color:#d93025; }
+.tools { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:20px 0 10px; flex-wrap:wrap; }
+.tools h2 { margin:0; }
+.clear { background:transparent; color:#d93025; border:1px solid #d93025; }
+.note { font-size:12px; color:var(--muted); margin:0 0 12px; }
+li.removing { opacity:.4; transition:opacity .2s; }
+li .t { font-weight:600; }
+li .d { font-size:12px; color:var(--muted); margin-top:2px; }
+.empty { text-align:center; color:var(--muted); padding:32px 8px; }
+h2 { font-size:16px; margin:20px 0 10px; color:var(--muted); font-weight:normal; }
+</style>
+</head>
+<body>
+<header>
+  <img src="/blog/pwa/icon-192.png" alt="" style="border-radius:14px;box-shadow:0 0 0 2px rgba(255,255,255,.85),0 4px 12px rgba(0,0,0,.15)">
+  <h1>离线阅读</h1>
+  <p>在文章顶部点“保存到本机”的文章会保存在这里，没有网络时也能打开</p>
+</header>
+<main>
+  <div class="status"><span id="net"></span><span><button id="retry" type="button">重新加载</button> <a class="btn" href="/blog/">回到首页</a></span></div>
+  <div class="tools"><h2 id="count">正在读取已保存的文章…</h2><button id="clear" class="clear" type="button" hidden>全部删除</button></div>
+  <p id="note" class="note" hidden></p>
+  <ul id="list"></ul>
+</main>
+<script>
+(function () {
+  var net = document.getElementById('net');
+  // 这个页面有两种打开方式：直接打开（菜单里的“离线阅读”），或者没网时代替一个还没保存的页面
+  var fallback = !/offline.html$/.test(location.pathname);
+  function showNet() {
+    if (fallback) net.innerHTML = '<b>网络不通</b>，这个页面还没有保存过，联网后点“重新加载”';
+    else net.innerHTML = navigator.onLine ? '想离线阅读某篇文章，打开它，点顶部的“保存到本机”' : '当前<b>没有网络</b>，可以阅读下面已保存的文章';
+  }
+  showNet(); addEventListener('online', showNet); addEventListener('offline', showNet);
+  document.getElementById('retry').onclick = function () {
+    if (!fallback && document.referrer) history.back(); else location.reload();
+  };
+  var list = document.getElementById('list'), count = document.getElementById('count');
+  if (!('caches' in window)) { count.textContent = '这个浏览器不支持离线保存'; return; }
+  // 文章页的 <head> 里有 og:type=article 和发布时间（网址里不再有日期，所以从页面本身判断）
+  caches.open('pages').then(function (cache) {
+    return cache.keys().then(function (reqs) {
+      return Promise.all(reqs.slice().reverse().map(function (r) {
+        return cache.match(r).then(function (res) { return res.text(); }).then(function (html) {
+          if (!/<meta property="og:type" content="article">/.test(html)) return null;
+          var m = html.match(/<title>([^<]*)<\/title>/);
+          var div = document.createElement('div'); div.innerHTML = m ? m[1] : '';
+          var title = (div.textContent || decodeURIComponent(new URL(r.url).pathname)).replace(/\s*\|\s*[^|]*$/, '');
+          var t = html.match(/<meta property="article:published_time" content="([^"]+)">/);
+          var d = t ? new Date(t[1]) : null;
+          var date = d && !isNaN(d) ? d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2) : '';
+          return { url: r.url, title: title, date: date };
+        });
+      })).then(function (items) { return items.filter(Boolean); });
+    });
+  }).then(render).catch(function () { count.textContent = '读取已保存的文章失败'; });
+
+  var clearBtn = document.getElementById('clear'), note = document.getElementById('note');
+  function showEmpty() {
+    count.textContent = '';
+    clearBtn.hidden = true;
+    list.innerHTML = '<li class="empty">还没有保存的文章。联网时打开一篇文章，点顶部的“保存到本机”，它就会保存下来。</li>';
+  }
+  function updateCount() {
+    var n = list.querySelectorAll('li.item').length;
+    if (!n) { showEmpty(); updateUsage(); return; }
+    count.textContent = '已保存 ' + n + ' 篇文章（最近保存的在前）';
+    updateUsage();
+  }
+  // 统计离线数据实际占用的空间：逐个读取缓存里的文件，把大小加起来。
+  // 不用 navigator.storage.estimate()：它是浏览器维护的近似值，删除的数据要等浏览器在后台整理存储后才会扣掉，
+  // 删除之后往往很久都不变。
+  function cacheBytes(name) {
+    return caches.open(name).then(function (c) {
+      return c.keys().then(function (reqs) {
+        return Promise.all(reqs.map(function (r) {
+          return c.match(r).then(function (res) { return res ? res.blob() : null; })
+            .then(function (b) { return b ? b.size : 0; }).catch(function () { return 0; });
+        }));
+      });
+    }).then(function (sizes) { return sizes.reduce(function (a, b) { return a + b; }, 0); });
+  }
+  function mb(bytes) { return (bytes / 1048576).toFixed(1) + ' MB'; }
+  var usageRun = 0;
+  function updateUsage() {
+    var run = ++usageRun;                 // 连续删除时，只显示最后一次统计的结果
+    caches.keys().then(function (names) {
+      var mine = names.filter(function (n) { return n === 'pages' || n === 'assets'; });
+      var core = names.filter(function (n) { return n.indexOf('core-') === 0; });
+      return Promise.all([Promise.all(mine.map(cacheBytes)), Promise.all(core.map(cacheBytes))]);
+    }).then(function (r) {
+      if (run !== usageRun) return;
+      var saved = r[0].reduce(function (a, b) { return a + b; }, 0);
+      var shared = r[1].reduce(function (a, b) { return a + b; }, 0);
+      note.textContent = '已保存的文章和图片占用 ' + mb(saved) + '；网站的公共文件（样式、脚本）另占 ' + mb(shared) +
+        '，由浏览器自动更新。删除后，联网再打开这篇文章，它会重新自动保存。';
+      note.hidden = false;
+    }).catch(function () { note.hidden = true; });
+  }
+  // 删除一篇文章：网页本身，以及它的文件夹里的图片（文章的配图都放在文章网址下面）
+  function removeArticle(url) {
+    return Promise.all([
+      caches.open('pages').then(function (c) { return c.delete(url); }),
+      caches.open('assets').then(function (c) {
+        return c.keys().then(function (reqs) {
+          return Promise.all(reqs.filter(function (r) { return r.url.indexOf(url) === 0; })
+            .map(function (r) { return c.delete(r); }));
+        });
+      })
+    ]);
+  }
+  function render(items) {
+    if (!items.length) { showEmpty(); updateUsage(); return; }
+    items.forEach(function (it) {
+      var li = document.createElement('li'), a = document.createElement('a');
+      li.className = 'item';
+      a.href = it.url;
+      var t = document.createElement('div'); t.className = 't'; t.textContent = it.title;
+      var d = document.createElement('div'); d.className = 'd'; d.textContent = '发布于 ' + it.date;
+      a.appendChild(t); a.appendChild(d);
+      var del = document.createElement('button');
+      del.type = 'button'; del.className = 'del'; del.textContent = '删除';
+      del.setAttribute('aria-label', '删除《' + it.title + '》的离线副本');
+      del.onclick = function () {
+        li.classList.add('removing'); del.disabled = true;
+        removeArticle(it.url).then(function () { li.remove(); updateCount(); })
+          .catch(function () { li.classList.remove('removing'); del.disabled = false; alert('删除失败，请稍后再试'); });
+      };
+      li.appendChild(a); li.appendChild(del); list.appendChild(li);
+    });
+    clearBtn.hidden = false;
+    updateCount();
+  }
+  clearBtn.onclick = function () {
+    var items = list.querySelectorAll('li.item');
+    if (!items.length || !confirm('确定删除全部 ' + items.length + ' 篇已保存的文章吗？')) return;
+    clearBtn.disabled = true;
+    // 已保存的网页和图片全部清空；主题的公共文件（CSS、JS）保留，下次打开不用重新下载
+    Promise.all([caches.delete('pages'), caches.delete('assets')]).then(function () {
+      list.innerHTML = ''; clearBtn.disabled = false; updateCount();
+    }).catch(function () { clearBtn.disabled = false; alert('删除失败，请稍后再试'); });
+  };
+})();
+</script>
+</body>
+</html>
